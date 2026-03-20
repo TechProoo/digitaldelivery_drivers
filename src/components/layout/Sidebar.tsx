@@ -18,6 +18,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { CURRENT_DRIVER } from "../../data/mock";
+import Logo from "../../assets/logo_2.png";
 
 /* ─── Sidebar Context ─── */
 interface SidebarState {
@@ -97,7 +98,7 @@ export default function Sidebar() {
             width: 44,
             height: 44,
             borderRadius: 14,
-            background: "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)",
+
             boxShadow:
               "0 4px 20px rgba(59,130,246,0.35), inset 0 1px 0 rgba(255,255,255,0.15)",
             display: "flex",
@@ -110,7 +111,7 @@ export default function Sidebar() {
             flexShrink: 0,
           }}
         >
-          DD
+          <img src={Logo} alt="" />
         </div>
         <div className="flex flex-col" style={{ minWidth: 0, flex: 1 }}>
           <span

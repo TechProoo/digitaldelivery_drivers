@@ -1,429 +1,333 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Search,
+  Shield,
   Send,
   Paperclip,
-  MoreVertical,
-  ArrowLeft,
-  Phone,
-  Video,
-  Check,
   CheckCheck,
-  MessageSquare,
+  Check,
+  AlertCircle,
+  MapPin,
+  Clock,
+  Info,
+  Smile,
 } from "lucide-react";
-import { CONVERSATIONS, MESSAGES } from "../data/mock";
-import { type Message } from "../types";
+import { ADMIN_MESSAGES, CURRENT_DRIVER } from "../data/mock";
+import type { Message } from "../types";
 
-const cssVars = {
-  "--bg-primary": "#0a0a0f",
-  "--bg-secondary": "#12121a",
-  "--bg-card": "#1a1a2e",
-  "--bg-card-hover": "#22223a",
-  "--border-soft": "rgba(255,255,255,0.06)",
-  "--border-medium": "rgba(255,255,255,0.12)",
-  "--text-primary": "#f0f0f5",
-  "--text-secondary": "#a0a0b8",
-  "--text-tertiary": "#6b6b80",
-  "--accent-blue": "#3b82f6",
-  "--accent-green": "#22c55e",
-  "--accent-purple": "#a855f7",
-  "--radius-lg": "16px",
-  "--radius-full": "9999px",
-} as React.CSSProperties;
-
-function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function formatTime(ts: string): string {
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function formatTime(timestamp: string): string {
-  const d = new Date(timestamp);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function formatDateHeader(ts: string): string {
+  const d = new Date(ts);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return "Today";
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function getMessageMeta(content: string) {
+  const lower = content.toLowerCase();
+  if (lower.includes("traffic") || lower.includes("construction") || lower.includes("congestion"))
+    return { icon: AlertCircle, rgb: "245,158,11" };
+  if (lower.includes("route") || lower.includes("pickup") || lower.includes("delivery"))
+    return { icon: MapPin, rgb: "59,130,246" };
+  if (lower.includes("reminder") || lower.includes("confirm"))
+    return { icon: Clock, rgb: "239,68,68" };
+  return { icon: Info, rgb: "100,116,139" };
 }
 
 export default function Messages() {
-  const [activeConversation, setActiveConversation] = useState<string | null>(
-    CONVERSATIONS[0]?.id ?? null
+  const [messages, setMessages] = useState<Message[]>(() =>
+    JSON.parse(JSON.stringify(ADMIN_MESSAGES)),
   );
-  const [messageInput, setMessageInput] = useState("");
-  const [localMessages, setLocalMessages] = useState<Record<string, Message[]>>(
-    () => JSON.parse(JSON.stringify(MESSAGES))
-  );
-  const [searchQuery, setSearchQuery] = useState("");
+  const [input, setInput] = useState("");
+  const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const activeConvo = CONVERSATIONS.find((c) => c.id === activeConversation);
-  const currentMessages = activeConversation
-    ? localMessages[activeConversation] ?? []
-    : [];
-
-  const filteredConversations = CONVERSATIONS.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const unreadCount = messages.filter((m) => !m.read && !m.isDriver).length;
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentMessages.length, activeConversation]);
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
 
   function handleSend() {
-    if (!messageInput.trim() || !activeConversation) return;
+    const text = input.trim();
+    if (!text) return;
     const newMsg: Message = {
-      id: `msg-${Date.now()}`,
-      senderId: "drv-001",
-      senderName: "Chidi Okonkwo",
-      content: messageInput.trim(),
+      id: `msg-drv-${Date.now()}`,
+      senderId: CURRENT_DRIVER.id,
+      senderName: CURRENT_DRIVER.name,
+      content: text,
       timestamp: new Date().toISOString(),
       isDriver: true,
       read: false,
     };
-    setLocalMessages((prev) => ({
-      ...prev,
-      [activeConversation]: [...(prev[activeConversation] ?? []), newMsg],
-    }));
-    setMessageInput("");
+    setMessages((prev) => [...prev, newMsg]);
+    setInput("");
+    inputRef.current?.focus();
+  }
+
+  // Group by date
+  const grouped: { date: string; msgs: Message[] }[] = [];
+  for (const msg of messages) {
+    const key = new Date(msg.timestamp).toDateString();
+    const last = grouped[grouped.length - 1];
+    if (last && last.date === key) last.msgs.push(msg);
+    else grouped.push({ date: key, msgs: [msg] });
   }
 
   return (
-    <div
-      className="flex h-full w-full overflow-hidden"
-      style={{ ...cssVars, background: "var(--bg-primary)", color: "var(--text-primary)" }}
-    >
-      {/* Left Panel — Conversation List */}
+    <div className="flex flex-col" style={{ height: "calc(100vh - var(--topbar-h, 64px) - 32px)" }}>
+      {/* ═══ Chat Header ═══ */}
       <div
-        className={`flex flex-col border-r ${
-          activeConversation ? "hidden md:flex" : "flex"
-        }`}
+        className="flex items-center gap-4 px-5 py-4"
         style={{
-          width: "100%",
-          maxWidth: "400px",
-          minWidth: "280px",
-          borderColor: "var(--border-soft)",
-          background: "var(--bg-secondary)",
+          background: "linear-gradient(145deg, #1a2332, #141c2c)",
+          borderRadius: "16px 16px 0 0",
+          border: "1px solid var(--border-soft)",
+          borderBottom: "none",
+          flexShrink: 0,
         }}
       >
-        {/* Search */}
-        <div className="p-4">
-          <div
-            className="flex items-center gap-2 px-3 py-2 rounded-xl"
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-soft)",
-            }}
-          >
-            <Search size={16} style={{ color: "var(--text-tertiary)" }} />
-            <input
-              type="text"
-              placeholder="Search conversations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent outline-none text-sm"
-              style={{ color: "var(--text-primary)" }}
-            />
+        <div style={{
+          width: 46, height: 46, borderRadius: 14,
+          background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+          boxShadow: "0 4px 16px rgba(59,130,246,0.3)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}>
+          <Shield size={22} style={{ color: "#fff" }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div className="flex items-center gap-2">
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: 0 }}>Admin</h2>
+            <span style={{
+              width: 8, height: 8, borderRadius: "50%", background: "#22c55e",
+              boxShadow: "0 0 6px rgba(34,197,94,0.5)", display: "inline-block",
+            }} />
+            <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>Online</span>
           </div>
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0, marginTop: 1 }}>
+            Digital Delivery Operations
+          </p>
         </div>
-
-        {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto">
-          {filteredConversations.map((conv) => {
-            const isActive = conv.id === activeConversation;
-            return (
-              <button
-                key={conv.id}
-                onClick={() => setActiveConversation(conv.id)}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
-                style={{
-                  background: isActive ? "var(--bg-card)" : "transparent",
-                  borderLeft: isActive ? "3px solid var(--accent-blue)" : "3px solid transparent",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive)
-                    (e.currentTarget as HTMLElement).style.background = "var(--bg-card-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive)
-                    (e.currentTarget as HTMLElement).style.background = "transparent";
-                }}
-              >
-                {/* Avatar */}
-                <div className="relative flex-shrink-0">
-                  <div
-                    className="flex items-center justify-center text-sm font-semibold"
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: "var(--radius-full)",
-                      background: "linear-gradient(135deg, #3b82f6, #a855f7)",
-                      boxShadow: "0 0 12px rgba(59,130,246,0.3)",
-                      color: "#fff",
-                    }}
-                  >
-                    {getInitials(conv.name)}
-                  </div>
-                  {conv.online && (
-                    <span
-                      className="absolute bottom-0 right-0 block"
-                      style={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: "var(--radius-full)",
-                        background: "var(--accent-green)",
-                        border: "2px solid var(--bg-secondary)",
-                      }}
-                    />
-                  )}
-                </div>
-
-                {/* Text */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
-                      {conv.name}
-                    </span>
-                    <span className="text-[10px] flex-shrink-0 ml-2" style={{ color: "var(--text-tertiary)" }}>
-                      {formatTime(conv.timestamp)}
-                    </span>
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>
-                    {conv.role}
-                  </div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <span
-                      className="text-xs truncate"
-                      style={{ color: "var(--text-secondary)", maxWidth: "200px" }}
-                    >
-                      {conv.lastMessage}
-                    </span>
-                    {conv.unread > 0 && (
-                      <span
-                        className="flex-shrink-0 ml-2 flex items-center justify-center text-[10px] font-bold"
-                        style={{
-                          minWidth: 20,
-                          height: 20,
-                          borderRadius: "var(--radius-full)",
-                          background: "var(--accent-blue)",
-                          color: "#fff",
-                          padding: "0 6px",
-                        }}
-                      >
-                        {conv.unread}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        {unreadCount > 0 && (
+          <span style={{
+            minWidth: 24, height: 24, borderRadius: 12,
+            background: "linear-gradient(135deg, #ef4444, #dc2626)",
+            color: "#fff", fontSize: 11, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "0 7px", boxShadow: "0 2px 8px rgba(239,68,68,0.35)",
+          }}>
+            {unreadCount}
+          </span>
+        )}
       </div>
 
-      {/* Right Panel — Chat View */}
-      {activeConversation && activeConvo ? (
-        <div
-          className={`flex-1 flex flex-col ${
-            activeConversation ? "flex" : "hidden md:flex"
-          }`}
-          style={{ background: "var(--bg-primary)" }}
-        >
-          {/* Chat header */}
-          <div
-            className="flex items-center gap-3 px-4 py-3 border-b"
-            style={{
-              borderColor: "var(--border-soft)",
-              background: "var(--bg-secondary)",
-            }}
-          >
-            <button
-              className="md:hidden p-1 rounded-lg"
-              style={{ color: "var(--text-secondary)" }}
-              onClick={() => setActiveConversation(null)}
-            >
-              <ArrowLeft size={20} />
-            </button>
-            {/* Avatar */}
-            <div className="relative flex-shrink-0">
-              <div
-                className="flex items-center justify-center text-xs font-semibold"
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "var(--radius-full)",
-                  background: "linear-gradient(135deg, #3b82f6, #a855f7)",
-                  boxShadow: "0 0 10px rgba(59,130,246,0.25)",
-                  color: "#fff",
-                }}
-              >
-                {getInitials(activeConvo.name)}
-              </div>
-              {activeConvo.online && (
-                <span
-                  className="absolute bottom-0 right-0 block"
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: "var(--radius-full)",
-                    background: "var(--accent-green)",
-                    border: "2px solid var(--bg-secondary)",
-                  }}
-                />
-              )}
+      {/* ═══ Message Feed ═══ */}
+      <div
+        className="flex-1 overflow-y-auto px-4 sm:px-6 py-5"
+        style={{
+          background: "linear-gradient(180deg, #0d1320, #0b1018)",
+          borderLeft: "1px solid var(--border-soft)",
+          borderRight: "1px solid var(--border-soft)",
+          display: "flex", flexDirection: "column", gap: 16,
+        }}
+      >
+        {grouped.map((group) => (
+          <div key={group.date} className="flex flex-col" style={{ gap: 10 }}>
+            {/* Date divider */}
+            <div className="flex items-center gap-3 py-2">
+              <div style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
+              <span style={{
+                fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)",
+                letterSpacing: "0.05em", textTransform: "uppercase",
+                padding: "4px 12px", borderRadius: 20,
+                background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-soft)",
+              }}>
+                {formatDateHeader(group.msgs[0].timestamp)}
+              </span>
+              <div style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                {activeConvo.name}
-              </div>
-              <div className="text-xs" style={{ color: activeConvo.online ? "var(--accent-green)" : "var(--text-tertiary)" }}>
-                {activeConvo.online ? "Online" : "Offline"}
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <button className="p-2 rounded-lg transition-colors hover:opacity-80" style={{ color: "var(--text-secondary)" }}>
-                <Phone size={18} />
-              </button>
-              <button className="p-2 rounded-lg transition-colors hover:opacity-80" style={{ color: "var(--text-secondary)" }}>
-                <Video size={18} />
-              </button>
-              <button className="p-2 rounded-lg transition-colors hover:opacity-80" style={{ color: "var(--text-secondary)" }}>
-                <MoreVertical size={18} />
-              </button>
-            </div>
-          </div>
 
-          {/* Messages area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {currentMessages.map((msg) => {
-              const isDriver = msg.isDriver;
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex ${isDriver ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className="max-w-[75%] px-4 py-2.5"
-                    style={{
-                      background: isDriver
-                        ? "linear-gradient(135deg, #2563eb, #3b82f6)"
-                        : "var(--bg-card)",
-                      color: isDriver ? "#fff" : "var(--text-primary)",
-                      borderRadius: isDriver
-                        ? "16px 16px 4px 16px"
-                        : "16px 16px 16px 4px",
-                    }}
-                  >
-                    {!isDriver && (
-                      <div
-                        className="text-xs font-medium mb-1"
-                        style={{ color: "var(--accent-blue)" }}
-                      >
-                        {msg.senderName}
+            {/* Messages */}
+            {group.msgs.map((msg) => {
+              if (msg.isDriver) {
+                // Driver (right-aligned) bubble
+                return (
+                  <div key={msg.id} style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <div style={{
+                      maxWidth: "75%",
+                      padding: "10px 14px",
+                      borderRadius: "14px 14px 4px 14px",
+                      background: "linear-gradient(135deg, #2563eb, #3b82f6)",
+                      boxShadow: "0 2px 8px rgba(59,130,246,0.2)",
+                    }}>
+                      <p style={{ fontSize: 13, lineHeight: 1.6, color: "#fff", margin: 0 }}>
+                        {msg.content}
+                      </p>
+                      <div className="flex items-center justify-end gap-1.5" style={{ marginTop: 4 }}>
+                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
+                          {formatTime(msg.timestamp)}
+                        </span>
+                        {msg.read
+                          ? <CheckCheck size={13} style={{ color: "rgba(255,255,255,0.7)" }} />
+                          : <Check size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
+                        }
                       </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Admin (left-aligned) bubble with category icon
+              const meta = getMessageMeta(msg.content);
+              const Icon = meta.icon;
+              return (
+                <div key={msg.id} style={{ display: "flex", justifyContent: "flex-start", gap: 8 }}>
+                  {/* Category icon */}
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                    background: `rgba(${meta.rgb},0.1)`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    marginTop: 4,
+                  }}>
+                    <Icon size={16} style={{ color: `rgb(${meta.rgb})` }} />
+                  </div>
+
+                  <div style={{
+                    maxWidth: "75%",
+                    padding: "10px 14px",
+                    borderRadius: "4px 14px 14px 14px",
+                    background: !msg.read
+                      ? `linear-gradient(145deg, rgba(${meta.rgb},0.06), rgba(${meta.rgb},0.02))`
+                      : "linear-gradient(145deg, #1e293b, #1a2332)",
+                    border: !msg.read
+                      ? `1px solid rgba(${meta.rgb},0.15)`
+                      : "1px solid var(--border-soft)",
+                    position: "relative",
+                  }}>
+                    {!msg.read && (
+                      <div style={{
+                        position: "absolute", top: 6, right: 6,
+                        width: 6, height: 6, borderRadius: "50%",
+                        background: `rgb(${meta.rgb})`,
+                        boxShadow: `0 0 6px rgba(${meta.rgb},0.5)`,
+                      }} />
                     )}
-                    <div className="text-sm leading-relaxed">{msg.content}</div>
-                    <div className="flex items-center justify-end gap-1 mt-1">
-                      <span
-                        className="text-[10px]"
-                        style={{
-                          color: isDriver ? "rgba(255,255,255,0.6)" : "var(--text-tertiary)",
-                        }}
-                      >
+                    <p style={{
+                      fontSize: 13, lineHeight: 1.6, color: "#fff",
+                      fontWeight: msg.read ? 400 : 500, margin: 0,
+                    }}>
+                      {msg.content}
+                    </p>
+                    <div className="flex items-center gap-1.5" style={{ marginTop: 4 }}>
+                      <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
                         {formatTime(msg.timestamp)}
                       </span>
-                      {isDriver &&
-                        (msg.read ? (
-                          <CheckCheck
-                            size={12}
-                            style={{ color: "rgba(255,255,255,0.7)" }}
-                          />
-                        ) : (
-                          <Check
-                            size={12}
-                            style={{ color: "rgba(255,255,255,0.5)" }}
-                          />
-                        ))}
                     </div>
                   </div>
                 </div>
               );
             })}
-            <div ref={messagesEndRef} />
           </div>
+        ))}
+        <div ref={endRef} />
+      </div>
 
-          {/* Input bar */}
-          <div
-            className="flex items-center gap-2 px-4 py-3 border-t"
-            style={{
-              borderColor: "var(--border-soft)",
-              background: "var(--bg-secondary)",
-            }}
-          >
-            <button
-              className="p-2 rounded-lg transition-colors hover:opacity-80"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              <Paperclip size={20} />
-            </button>
-            <input
-              type="text"
-              placeholder="Type a message..."
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              className="flex-1 px-4 py-2 rounded-xl text-sm outline-none transition-shadow"
-              style={{
-                background: "var(--bg-card)",
-                border: "1px solid var(--border-soft)",
-                color: "var(--text-primary)",
-              }}
-              onFocus={(e) => {
-                (e.target as HTMLElement).style.boxShadow = "0 0 0 2px var(--accent-blue)";
-              }}
-              onBlur={(e) => {
-                (e.target as HTMLElement).style.boxShadow = "none";
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!messageInput.trim()}
-              className="p-2.5 rounded-full transition-opacity"
-              style={{
-                background: "var(--accent-blue)",
-                color: "#fff",
-                opacity: messageInput.trim() ? 1 : 0.4,
-                cursor: messageInput.trim() ? "pointer" : "default",
-              }}
-            >
-              <Send size={18} />
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* Empty state — desktop only */
-        <div
-          className="hidden md:flex flex-1 flex-col items-center justify-center gap-4"
-          style={{ background: "var(--bg-primary)" }}
+      {/* ═══ Message Input ═══ */}
+      <div
+        className="flex items-center gap-2 px-4 py-3"
+        style={{
+          background: "linear-gradient(145deg, #1a2332, #141c2c)",
+          borderRadius: "0 0 16px 16px",
+          border: "1px solid var(--border-soft)",
+          borderTop: "none",
+          flexShrink: 0,
+        }}
+      >
+        {/* Attach */}
+        <button
+          style={{
+            width: 38, height: 38, borderRadius: 10, border: "none",
+            background: "rgba(255,255,255,0.04)", color: "var(--text-tertiary)",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 150ms", flexShrink: 0,
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "var(--text-tertiary)"; }}
         >
-          <div
-            className="p-4 rounded-2xl"
-            style={{ background: "var(--bg-card)" }}
-          >
-            <MessageSquare size={40} style={{ color: "var(--text-tertiary)" }} />
-          </div>
-          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            Select a conversation
-          </span>
-        </div>
-      )}
+          <Paperclip size={18} />
+        </button>
+
+        {/* Emoji */}
+        <button
+          style={{
+            width: 38, height: 38, borderRadius: 10, border: "none",
+            background: "rgba(255,255,255,0.04)", color: "var(--text-tertiary)",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 150ms", flexShrink: 0,
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "var(--text-tertiary)"; }}
+        >
+          <Smile size={18} />
+        </button>
+
+        {/* Text input */}
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Type a message..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          style={{
+            flex: 1, height: 42, padding: "0 16px",
+            borderRadius: 12, border: "1px solid var(--border-soft)",
+            background: "rgba(255,255,255,0.04)", color: "#fff",
+            fontSize: 13, outline: "none",
+            transition: "all 200ms",
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)";
+            e.currentTarget.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.1)";
+            e.currentTarget.style.background = "rgba(59,130,246,0.04)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--border-soft)";
+            e.currentTarget.style.boxShadow = "none";
+            e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+          }}
+        />
+
+        {/* Send */}
+        <button
+          onClick={handleSend}
+          disabled={!input.trim()}
+          style={{
+            width: 42, height: 42, borderRadius: 12, border: "none",
+            background: input.trim()
+              ? "linear-gradient(135deg, #3b82f6, #2563eb)"
+              : "rgba(255,255,255,0.06)",
+            color: input.trim() ? "#fff" : "var(--text-tertiary)",
+            cursor: input.trim() ? "pointer" : "default",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 200ms", flexShrink: 0,
+            boxShadow: input.trim() ? "0 4px 12px rgba(59,130,246,0.3)" : "none",
+          }}
+        >
+          <Send size={18} />
+        </button>
+      </div>
     </div>
   );
 }

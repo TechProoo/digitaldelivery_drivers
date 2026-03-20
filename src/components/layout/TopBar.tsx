@@ -30,11 +30,10 @@ export default function TopBar({ title }: TopBarProps) {
       {/* Hamburger – mobile */}
       <button
         onClick={open}
-        className="lg:hidden"
+        className="flex md:hidden"
         style={{
           width: 40,
           height: 40,
-          display: "flex",
           alignItems: "center",
           justifyContent: "center",
           borderRadius: "var(--radius-sm)",

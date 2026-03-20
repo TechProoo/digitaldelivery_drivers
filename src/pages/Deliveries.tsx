@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DELIVERIES } from "../data/mock";
+import { useDeliveries } from "../contexts/DeliveryContext";
 import { STATUS_CONFIG, type Delivery, type DeliveryStatus } from "../types";
 import {
   Package,
@@ -8,6 +8,9 @@ import {
   Clock,
   ArrowRight,
   Phone,
+  CheckCircle2,
+  Navigation,
+  AlertTriangle,
 } from "lucide-react";
 
 const FILTER_OPTIONS: { value: DeliveryStatus | "all"; label: string }[] = [
@@ -25,10 +28,20 @@ function formatNaira(amount: number): string {
 }
 
 export default function Deliveries() {
+  const {
+    deliveries,
+    activeDeliveryId,
+    acceptDelivery,
+    pickUpDelivery,
+    startDelivery,
+    completeDelivery,
+    failDelivery,
+    rejectDelivery,
+  } = useDeliveries();
   const [activeFilter, setActiveFilter] = useState<DeliveryStatus | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredDeliveries = DELIVERIES.filter((d) => {
+  const filteredDeliveries = deliveries.filter((d) => {
     if (activeFilter !== "all" && d.status !== activeFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -42,11 +55,11 @@ export default function Deliveries() {
     return true;
   });
 
-  const totalCount = DELIVERIES.length;
-  const activeCount = DELIVERIES.filter((d) =>
+  const totalCount = deliveries.length;
+  const activeCount = deliveries.filter((d) =>
     ["pending", "assigned", "picked_up", "in_transit"].includes(d.status)
   ).length;
-  const completedCount = DELIVERIES.filter((d) => d.status === "delivered").length;
+  const completedCount = deliveries.filter((d) => d.status === "delivered").length;
 
   return (
     <div style={{ padding: "24px 16px", maxWidth: 720, margin: "0 auto" }}>
@@ -194,7 +207,17 @@ export default function Deliveries() {
       {filteredDeliveries.length > 0 ? (
         <div className="stagger" style={{ display: "grid", gap: 14 }}>
           {filteredDeliveries.map((delivery) => (
-            <DeliveryCard key={delivery.id} delivery={delivery} />
+            <DeliveryCard
+              key={delivery.id}
+              delivery={delivery}
+              activeDeliveryId={activeDeliveryId}
+              onAccept={acceptDelivery}
+              onDecline={rejectDelivery}
+              onPickUp={pickUpDelivery}
+              onStartDelivery={startDelivery}
+              onCompleteDelivery={completeDelivery}
+              onFailDelivery={failDelivery}
+            />
           ))}
         </div>
       ) : (
@@ -227,7 +250,27 @@ export default function Deliveries() {
   );
 }
 
-function DeliveryCard({ delivery }: { delivery: Delivery }) {
+interface DeliveryCardProps {
+  delivery: Delivery;
+  activeDeliveryId: string | null;
+  onAccept: (id: string) => void;
+  onDecline: (id: string) => void;
+  onPickUp: (id: string) => void;
+  onStartDelivery: (id: string) => void;
+  onCompleteDelivery: (id: string) => void;
+  onFailDelivery: (id: string) => void;
+}
+
+function DeliveryCard({
+  delivery,
+  activeDeliveryId,
+  onAccept,
+  onDecline,
+  onPickUp,
+  onStartDelivery,
+  onCompleteDelivery,
+  onFailDelivery,
+}: DeliveryCardProps) {
   const status = STATUS_CONFIG[delivery.status];
   const eta = delivery.estimatedArrival
     ? new Date(delivery.estimatedArrival).toLocaleTimeString([], {
@@ -236,25 +279,65 @@ function DeliveryCard({ delivery }: { delivery: Delivery }) {
       })
     : "N/A";
 
+  const isLiveTracking =
+    delivery.status === "in_transit" && activeDeliveryId === delivery.id;
+
   return (
     <div
       className="surface-gradient"
       style={{
         padding: 16,
         borderRadius: "var(--radius-lg)",
-        border: "1px solid var(--border-soft)",
+        border: isLiveTracking
+          ? "1.5px solid var(--accent-blue)"
+          : "1px solid var(--border-soft)",
         transition: "all 0.2s",
         cursor: "pointer",
+        boxShadow: isLiveTracking
+          ? "0 0 20px rgba(59,130,246,0.15)"
+          : undefined,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateY(-1px)";
-        e.currentTarget.style.borderColor = "var(--border-medium)";
+        if (!isLiveTracking)
+          e.currentTarget.style.borderColor = "var(--border-medium)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.borderColor = "var(--border-soft)";
+        if (!isLiveTracking)
+          e.currentTarget.style.borderColor = "var(--border-soft)";
       }}
     >
+      {/* Live tracking indicator */}
+      {isLiveTracking && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "rgba(34,197,94,0.1)",
+            borderRadius: 8,
+            padding: "6px 12px",
+            marginBottom: 12,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--accent-green)",
+          }}
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: "var(--accent-green)",
+              display: "inline-block",
+              animation: "pulse 1.5s ease-in-out infinite",
+            }}
+          />
+          LIVE TRACKING — Location broadcasting to admin
+        </div>
+      )}
+
       {/* Top row */}
       <div
         style={{
@@ -470,6 +553,212 @@ function DeliveryCard({ delivery }: { delivery: Delivery }) {
             Details <ArrowRight size={14} />
           </button>
         </div>
+      </div>
+
+      {/* Action buttons */}
+      <div
+        style={{
+          borderTop: "1px solid var(--border-soft)",
+          paddingTop: 12,
+          marginTop: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        {delivery.status === "pending" && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); onAccept(delivery.id); }}
+              style={{
+                height: 40,
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                border: "none",
+                padding: "0 20px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "linear-gradient(135deg, #22c55e, #16a34a)",
+                color: "#fff",
+              }}
+            >
+              <CheckCircle2 size={16} />
+              Accept
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDecline(delivery.id); }}
+              style={{
+                height: 40,
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: "transparent",
+                border: "1.5px solid #ef4444",
+                color: "#ef4444",
+                padding: "0 20px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              Decline
+            </button>
+          </>
+        )}
+
+        {delivery.status === "assigned" && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPickUp(delivery.id); }}
+            style={{
+              height: 40,
+              borderRadius: 12,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              border: "none",
+              padding: "0 20px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "linear-gradient(135deg, #a855f7, #9333ea)",
+              color: "#fff",
+            }}
+          >
+            <Package size={16} />
+            Pick Up
+          </button>
+        )}
+
+        {delivery.status === "picked_up" && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onStartDelivery(delivery.id); }}
+            style={{
+              height: 40,
+              borderRadius: 12,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              border: "none",
+              padding: "0 24px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+              color: "#fff",
+              boxShadow: "0 4px 12px rgba(59,130,246,0.25)",
+            }}
+          >
+            <Navigation size={16} />
+            Start Delivery
+          </button>
+        )}
+
+        {delivery.status === "in_transit" && (
+          <>
+            {isLiveTracking && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--accent-green)",
+                  marginRight: 4,
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "var(--accent-green)",
+                    display: "inline-block",
+                    animation: "pulse 1.5s ease-in-out infinite",
+                  }}
+                />
+                Broadcasting location
+              </span>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onCompleteDelivery(delivery.id); }}
+              style={{
+                height: 40,
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                border: "none",
+                padding: "0 20px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "linear-gradient(135deg, #06b6d4, #0891b2)",
+                color: "#fff",
+              }}
+            >
+              <CheckCircle2 size={16} />
+              Mark Delivered
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onFailDelivery(delivery.id); }}
+              style={{
+                height: 40,
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: "transparent",
+                border: "1.5px solid #ef4444",
+                color: "#ef4444",
+                padding: "0 16px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <AlertTriangle size={14} />
+              Report Issue
+            </button>
+          </>
+        )}
+
+        {delivery.status === "delivered" && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--accent-green)",
+            }}
+          >
+            <CheckCircle2 size={16} />
+            Completed
+          </span>
+        )}
+
+        {delivery.status === "failed" && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#ef4444",
+            }}
+          >
+            <AlertTriangle size={16} />
+            Failed
+          </span>
+        )}
       </div>
     </div>
   );

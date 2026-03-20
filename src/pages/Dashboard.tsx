@@ -14,8 +14,9 @@ import {
   ChevronRight,
   Phone,
 } from "lucide-react";
-import { DELIVERIES, EARNINGS_SUMMARY, CURRENT_DRIVER, NOTIFICATIONS } from "../data/mock";
+import { EARNINGS_SUMMARY, CURRENT_DRIVER, NOTIFICATIONS } from "../data/mock";
 import { STATUS_CONFIG } from "../types";
+import { useDeliveries } from "../contexts/DeliveryContext";
 
 function formatNaira(amount: number): string {
   return new Intl.NumberFormat("en-NG", {
@@ -65,8 +66,9 @@ const NOTIF_RGB: Record<string, string> = {
 
 export default function Dashboard() {
   const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
+  const { deliveries, activeDeliveryId, pickUpDelivery, startDelivery, completeDelivery } = useDeliveries();
   const firstName = CURRENT_DRIVER.name.split(" ")[0];
-  const todayDeliveries = DELIVERIES.filter((d) => isToday(d.scheduledAt));
+  const todayDeliveries = deliveries.filter((d) => isToday(d.scheduledAt));
   const completedDeliveries = todayDeliveries.filter((d) => d.status === "delivered");
   const activeDeliveries = todayDeliveries.filter((d) => d.status !== "delivered" && d.status !== "failed");
   const distanceCovered = completedDeliveries.reduce((sum, d) => sum + d.distance, 0);
@@ -185,18 +187,34 @@ export default function Dashboard() {
               const eta = delivery.estimatedArrival ? new Date(delivery.estimatedArrival).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" }) : "TBD";
               const isExpanded = expandedDelivery === delivery.id;
 
+              const isTracking = activeDeliveryId === delivery.id && delivery.status === "in_transit";
+
               return (
                 <div
                   key={delivery.id}
                   style={{
-                    background: "linear-gradient(145deg, #1a2332 0%, #141c2c 100%)",
+                    background: isTracking
+                      ? "linear-gradient(145deg, rgba(34,197,94,0.04), #1a2332 30%, #141c2c 100%)"
+                      : "linear-gradient(145deg, #1a2332 0%, #141c2c 100%)",
                     borderRadius: 16,
-                    border: isExpanded ? "1px solid var(--border-medium)" : "1px solid var(--border-soft)",
+                    border: isTracking
+                      ? "1.5px solid rgba(34,197,94,0.3)"
+                      : isExpanded ? "1px solid var(--border-medium)" : "1px solid var(--border-soft)",
                     overflow: "hidden",
                     transition: "all 200ms cubic-bezier(0.16,1,0.3,1)",
-                    boxShadow: isExpanded ? "0 4px 20px rgba(0,0,0,0.3)" : "none",
+                    boxShadow: isTracking
+                      ? "0 0 24px rgba(34,197,94,0.1)"
+                      : isExpanded ? "0 4px 20px rgba(0,0,0,0.3)" : "none",
                   }}
                 >
+                  {/* Live tracking banner */}
+                  {isTracking && (
+                    <div className="flex items-center gap-2 px-4 py-2" style={{ background: "rgba(34,197,94,0.08)", borderBottom: "1px solid rgba(34,197,94,0.1)" }}>
+                      <span className="animate-pulse-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", boxShadow: "0 0 6px rgba(34,197,94,0.5)" }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", letterSpacing: "0.05em" }}>LIVE TRACKING</span>
+                      <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>&mdash; Location broadcasting to admin</span>
+                    </div>
+                  )}
                   {/* Main row — always visible */}
                   <div
                     className="flex items-center gap-4 p-4 cursor-pointer"
@@ -264,16 +282,50 @@ export default function Dashboard() {
                           <div className="flex items-center gap-2">
                             <span style={{ fontFamily: "monospace", fontSize: 11, color: "var(--text-tertiary)", background: "rgba(255,255,255,0.04)", padding: "4px 8px", borderRadius: 6 }}>{delivery.trackingNumber}</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          {/* Workflow Actions */}
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(34,197,94,0.12)", border: "none", color: "#22c55e", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} title="Call customer">
                               <Phone size={16} />
                             </button>
-                            <button style={{ background: "linear-gradient(135deg, #3b82f6, #2563eb)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 12px rgba(59,130,246,0.25)" }}
-                              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 6px 20px rgba(59,130,246,0.35)"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(59,130,246,0.25)"; }}
-                            >
-                              <Navigation size={14} /> Navigate
-                            </button>
+
+                            {delivery.status === "assigned" && (
+                              <button
+                                onClick={() => pickUpDelivery(delivery.id)}
+                                style={{ background: "linear-gradient(135deg, #a855f7, #9333ea)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 12px rgba(168,85,247,0.25)" }}
+                              >
+                                <Package size={14} /> Pick Up
+                              </button>
+                            )}
+
+                            {delivery.status === "picked_up" && (
+                              <button
+                                onClick={() => startDelivery(delivery.id)}
+                                style={{ background: "linear-gradient(135deg, #3b82f6, #2563eb)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 12px rgba(59,130,246,0.3)" }}
+                              >
+                                <Navigation size={14} /> Start Delivery
+                              </button>
+                            )}
+
+                            {delivery.status === "in_transit" && (
+                              <>
+                                {activeDeliveryId === delivery.id && (
+                                  <span className="flex items-center gap-1.5" style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.1)", padding: "4px 10px", borderRadius: 8 }}>
+                                    <span className="animate-pulse-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                                    LIVE
+                                  </span>
+                                )}
+                                <button
+                                  onClick={() => completeDelivery(delivery.id)}
+                                  style={{ background: "linear-gradient(135deg, #06b6d4, #0891b2)", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 12px rgba(6,182,212,0.25)" }}
+                                >
+                                  <CheckCircle2 size={14} /> Mark Delivered
+                                </button>
+                              </>
+                            )}
+
+                            {delivery.status === "pending" && (
+                              <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontStyle: "italic" }}>Awaiting confirmation...</span>
+                            )}
                           </div>
                         </div>
                       </div>

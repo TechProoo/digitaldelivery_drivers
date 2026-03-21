@@ -1,4 +1,6 @@
-export type DeliveryStatus = "pending" | "assigned" | "picked_up" | "in_transit" | "delivered" | "failed";
+export type DeliveryStatus = "pending" | "assigned" | "picked_up" | "in_transit" | "handed_off" | "delivered" | "failed";
+
+export type ServiceType = "ROAD" | "AIR" | "SEA" | "DOOR_TO_DOOR";
 
 export interface Delivery {
   id: string;
@@ -8,6 +10,7 @@ export interface Delivery {
   pickupAddress: string;
   dropoffAddress: string;
   status: DeliveryStatus;
+  serviceType: ServiceType;
   scheduledAt: string;
   estimatedArrival: string | null;
   distance: number;
@@ -28,6 +31,9 @@ export interface Driver {
   vehicleType: string;
   vehiclePlate: string;
   status: "online" | "offline" | "on_delivery";
+  bankName: string;
+  bankAccount: string;
+  bankAccountName: string;
 }
 
 export interface Message {
@@ -94,6 +100,7 @@ export const STATUS_CONFIG: Record<DeliveryStatus, { label: string; color: strin
   assigned: { label: "Assigned", color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
   picked_up: { label: "Picked Up", color: "#a855f7", bg: "rgba(168,85,247,0.12)" },
   in_transit: { label: "In Transit", color: "#22c55e", bg: "rgba(34,197,94,0.12)" },
+  handed_off: { label: "Handed Off", color: "#f97316", bg: "rgba(249,115,22,0.12)" },
   delivered: { label: "Delivered", color: "#06b6d4", bg: "rgba(6,182,212,0.12)" },
   failed: { label: "Failed", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
 };

@@ -9,7 +9,6 @@ import DeliveryAlert from "../DeliveryAlert";
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
   "/deliveries": "Deliveries",
-  "/tracking": "Live Tracking",
   "/messages": "Messages",
   "/earnings": "Earnings",
   "/fleet": "Fleet Management",

@@ -22,7 +22,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const s = io(SOCKET_URL, {
+    const s = io(`${SOCKET_URL}/delivery`, {
       autoConnect: true,
       reconnection: true,
       reconnectionDelay: 2000,

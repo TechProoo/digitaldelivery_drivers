@@ -19,6 +19,9 @@ export const CURRENT_DRIVER: Driver = {
   vehicleType: "Van",
   vehiclePlate: "LSR-472-KJ",
   status: "online",
+  bankName: "",
+  bankAccount: "",
+  bankAccountName: "",
 };
 
 export const DELIVERIES: Delivery[] = [
@@ -37,6 +40,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "Fragile electronics. Handle with care.",
     weight: 3.2,
     items: 2,
+    serviceType: "ROAD",
   },
   {
     id: "del-1002",
@@ -53,6 +57,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "Customer requests call on arrival.",
     weight: 7.5,
     items: 4,
+    serviceType: "ROAD",
   },
   {
     id: "del-1003",
@@ -69,6 +74,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "Leave at reception if customer is unavailable.",
     weight: 1.8,
     items: 1,
+    serviceType: "AIR",
   },
   {
     id: "del-1004",
@@ -85,6 +91,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "Two packages, same recipient.",
     weight: 5.0,
     items: 2,
+    serviceType: "ROAD",
   },
   {
     id: "del-1005",
@@ -101,6 +108,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "",
     weight: 2.4,
     items: 3,
+    serviceType: "ROAD",
   },
   {
     id: "del-1006",
@@ -117,6 +125,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "Signed delivery required.",
     weight: 10.0,
     items: 6,
+    serviceType: "SEA",
   },
   {
     id: "del-1007",
@@ -133,6 +142,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "Perishable goods. Deliver promptly.",
     weight: 4.5,
     items: 2,
+    serviceType: "ROAD",
   },
   {
     id: "del-1008",
@@ -149,6 +159,7 @@ export const DELIVERIES: Delivery[] = [
     notes: "Customer gate code: 4421.",
     weight: 6.1,
     items: 3,
+    serviceType: "ROAD",
   },
 ];
 

@@ -2,7 +2,6 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
-  MapPin,
   MessageSquare,
   DollarSign,
 } from "lucide-react";
@@ -10,7 +9,6 @@ import {
 const TABS = [
   { to: "/", label: "Home", icon: LayoutDashboard },
   { to: "/deliveries", label: "Deliveries", icon: Package },
-  { to: "/tracking", label: "Tracking", icon: MapPin },
   { to: "/messages", label: "Messages", icon: MessageSquare },
   { to: "/earnings", label: "Earnings", icon: DollarSign },
 ];

@@ -45,6 +45,8 @@ interface DeliveryContextValue extends DeliveryState {
   completeDelivery: (deliveryId: string) => void;
   /** Report failed delivery */
   failDelivery: (deliveryId: string) => void;
+  /** Hand off to carrier (AIR/SEA) — pauses GPS tracking */
+  handOffDelivery: (deliveryId: string) => void;
   /** Dismiss the new-assignment alert toast */
   dismissAlert: (deliveryId: string) => void;
 }
@@ -62,9 +64,9 @@ function reducer(state: DeliveryState, action: DeliveryAction): DeliveryState {
         deliveries: state.deliveries.map((d) =>
           d.id === action.deliveryId ? { ...d, status: action.status } : d,
         ),
-        // If delivered or failed, clear active tracking
+        // If delivered, failed, or handed off, clear active tracking
         activeDeliveryId:
-          (action.status === "delivered" || action.status === "failed") &&
+          (action.status === "delivered" || action.status === "failed" || action.status === "handed_off") &&
           state.activeDeliveryId === action.deliveryId
             ? null
             : state.activeDeliveryId,
@@ -163,10 +165,22 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
 
   const acceptDelivery = useCallback(
     (deliveryId: string) => {
+      // Block accepting if driver already has an active delivery
+      const hasActive = state.deliveries.some(
+        (d) =>
+          d.id !== deliveryId &&
+          d.status !== "delivered" &&
+          d.status !== "failed" &&
+          d.status !== "pending",
+      );
+      if (hasActive) {
+        alert("You must complete your current delivery before accepting a new one.");
+        return;
+      }
       emitStatus(deliveryId, "assigned");
       dispatch({ type: "DISMISS_ALERT", deliveryId });
     },
-    [emitStatus],
+    [emitStatus, state.deliveries],
   );
 
   const rejectDelivery = useCallback(
@@ -224,6 +238,15 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
     [emitStatus],
   );
 
+  const handOffDelivery = useCallback(
+    (deliveryId: string) => {
+      emitStatus(deliveryId, "handed_off");
+      dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId: null });
+      socket?.emit("driver:tracking-stopped", { driverId: CURRENT_DRIVER.id });
+    },
+    [emitStatus, socket],
+  );
+
   const dismissAlert = useCallback(
     (deliveryId: string) => dispatch({ type: "DISMISS_ALERT", deliveryId }),
     [],
@@ -239,6 +262,7 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
         startDelivery,
         completeDelivery,
         failDelivery,
+        handOffDelivery,
         dismissAlert,
       }}
     >

@@ -9,7 +9,6 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
-  MapPin,
   MessageSquare,
   DollarSign,
   Truck,
@@ -18,6 +17,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { CURRENT_DRIVER } from "../../data/mock";
+import { useAuth } from "../../contexts/AuthContext";
 import Logo from "../../assets/logo_2.png";
 
 /* ─── Sidebar Context ─── */
@@ -55,13 +55,10 @@ export function useSidebar() {
 const MAIN_NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/deliveries", label: "Deliveries", icon: Package },
-  { to: "/tracking", label: "Tracking", icon: MapPin },
   { to: "/messages", label: "Messages", icon: MessageSquare, badge: 3 },
   { to: "/earnings", label: "Earnings", icon: DollarSign },
   { to: "/fleet", label: "Fleet", icon: Truck },
 ];
-
-const BOTTOM_NAV = [{ label: "Log Out", icon: LogOut }];
 
 function getInitials(name: string) {
   return name
@@ -75,6 +72,12 @@ function getInitials(name: string) {
 /* ─── Component ─── */
 export default function Sidebar() {
   const { isOpen, close } = useSidebar();
+  const { logout, driver: authDriver } = useAuth();
+
+  // Use auth driver data if available, fall back to mock
+  const driverName = authDriver?.driverName || CURRENT_DRIVER.name;
+  const driverVehicleType = authDriver?.vehicleType || CURRENT_DRIVER.vehicleType;
+  const driverRating = CURRENT_DRIVER.rating;
 
   const sidebarContent = (
     <div
@@ -316,20 +319,16 @@ export default function Sidebar() {
         }}
       />
 
-      {/* ── Bottom actions ── */}
+      {/* ── Log Out ── */}
       <div className="flex flex-col gap-0.5 px-3 py-3">
-        {BOTTOM_NAV.map(({ label, icon: Icon }) => (
           <button
-            key={label}
+            onClick={logout}
             className="flex items-center gap-3 px-3 py-2"
             style={{
               borderRadius: 10,
               border: "none",
               background: "transparent",
-              color:
-                label === "Log Out"
-                  ? "var(--accent-red)"
-                  : "var(--text-tertiary)",
+              color: "var(--accent-red)",
               fontSize: 13,
               fontWeight: 500,
               cursor: "pointer",
@@ -338,23 +337,15 @@ export default function Sidebar() {
               textAlign: "left",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background =
-                label === "Log Out"
-                  ? "rgba(239,68,68,0.08)"
-                  : "rgba(255,255,255,0.04)";
-              if (label !== "Log Out")
-                e.currentTarget.style.color = "var(--text-secondary)";
+              e.currentTarget.style.background = "rgba(239,68,68,0.08)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "transparent";
-              if (label !== "Log Out")
-                e.currentTarget.style.color = "var(--text-tertiary)";
             }}
           >
-            <Icon size={18} strokeWidth={1.7} />
-            <span>{label}</span>
+            <LogOut size={18} strokeWidth={1.7} />
+            <span>Log Out</span>
           </button>
-        ))}
       </div>
 
       {/* ── Separator ── */}
@@ -396,7 +387,7 @@ export default function Sidebar() {
               letterSpacing: "-0.02em",
             }}
           >
-            {getInitials(CURRENT_DRIVER.name)}
+            {getInitials(driverName)}
           </div>
           {/* Online dot */}
           <span
@@ -437,7 +428,7 @@ export default function Sidebar() {
               textOverflow: "ellipsis",
             }}
           >
-            {CURRENT_DRIVER.name}
+            {driverName}
           </span>
           <span
             style={{
@@ -446,7 +437,7 @@ export default function Sidebar() {
               fontWeight: 500,
             }}
           >
-            {CURRENT_DRIVER.vehicleType} &middot; {CURRENT_DRIVER.rating}{" "}
+            {driverVehicleType} &middot; {driverRating}{" "}
             &#9733;
           </span>
         </div>

@@ -41,6 +41,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 3.2,
     items: 2,
     serviceType: "ROAD",
+    receiverPhone: "",
+    packageType: "Parcel",
+    dimensions: "30x20x15 cm",
+    declaredValue: 0,
   },
   {
     id: "del-1002",
@@ -58,6 +62,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 7.5,
     items: 4,
     serviceType: "ROAD",
+    receiverPhone: "",
+    packageType: "Parcel",
+    dimensions: "30x20x15 cm",
+    declaredValue: 0,
   },
   {
     id: "del-1003",
@@ -75,6 +83,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 1.8,
     items: 1,
     serviceType: "AIR",
+    receiverPhone: "+234 809 333 4456",
+    packageType: "Documents",
+    dimensions: "A4 envelope",
+    declaredValue: 50000,
   },
   {
     id: "del-1004",
@@ -92,6 +104,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 5.0,
     items: 2,
     serviceType: "ROAD",
+    receiverPhone: "",
+    packageType: "Parcel",
+    dimensions: "30x20x15 cm",
+    declaredValue: 0,
   },
   {
     id: "del-1005",
@@ -109,6 +125,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 2.4,
     items: 3,
     serviceType: "ROAD",
+    receiverPhone: "",
+    packageType: "Parcel",
+    dimensions: "30x20x15 cm",
+    declaredValue: 0,
   },
   {
     id: "del-1006",
@@ -126,6 +146,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 10.0,
     items: 6,
     serviceType: "SEA",
+    receiverPhone: "+234 814 666 7789",
+    packageType: "Cargo",
+    dimensions: "120x80x60 cm",
+    declaredValue: 250000,
   },
   {
     id: "del-1007",
@@ -143,6 +167,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 4.5,
     items: 2,
     serviceType: "ROAD",
+    receiverPhone: "",
+    packageType: "Parcel",
+    dimensions: "30x20x15 cm",
+    declaredValue: 0,
   },
   {
     id: "del-1008",
@@ -160,6 +188,10 @@ export const DELIVERIES: Delivery[] = [
     weight: 6.1,
     items: 3,
     serviceType: "ROAD",
+    receiverPhone: "",
+    packageType: "Parcel",
+    dimensions: "30x20x15 cm",
+    declaredValue: 0,
   },
 ];
 

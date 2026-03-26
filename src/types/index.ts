@@ -7,6 +7,7 @@ export interface Delivery {
   trackingNumber: string;
   customerName: string;
   customerPhone: string;
+  receiverPhone: string;
   pickupAddress: string;
   dropoffAddress: string;
   status: DeliveryStatus;
@@ -18,6 +19,9 @@ export interface Delivery {
   notes: string;
   weight: number;
   items: number;
+  packageType: string;
+  dimensions: string;
+  declaredValue: number;
 }
 
 export interface Driver {

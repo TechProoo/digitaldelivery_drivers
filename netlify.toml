@@ -2,8 +2,8 @@
   command = "rm -rf node_modules package-lock.json && npm install && npm run build"
   publish = "dist"
 
-# Set VITE_API_URL in Netlify dashboard > Site settings > Environment variables
-# Example: https://digitaldelivery-backend.onrender.com
+[build.environment]
+  VITE_API_URL = "https://api.digitaldelivery.org"
 
 # SPA: redirect all routes to index.html for client-side routing
 [[redirects]]

@@ -7,7 +7,8 @@ import {
   type ReactNode,
 } from "react";
 import { useSocket } from "./SocketContext";
-import { DELIVERIES, CURRENT_DRIVER } from "../data/mock";
+import { useAuth } from "./AuthContext";
+import { getDriverDeliveries, updateDeliveryStatus as apiUpdateStatus } from "../services/api";
 import type { Delivery, DeliveryStatus } from "../types";
 
 /* ─── Types ─── */
@@ -19,6 +20,7 @@ interface IncomingAlert {
 
 interface DeliveryState {
   deliveries: Delivery[];
+  loading: boolean;
   /** Delivery currently being tracked (live location sent to admin) */
   activeDeliveryId: string | null;
   /** Pending alerts for new assignments */
@@ -27,28 +29,22 @@ interface DeliveryState {
 
 type DeliveryAction =
   | { type: "SET_DELIVERIES"; deliveries: Delivery[] }
+  | { type: "SET_LOADING"; loading: boolean }
   | { type: "UPDATE_STATUS"; deliveryId: string; status: DeliveryStatus }
   | { type: "NEW_ASSIGNMENT"; delivery: Delivery }
   | { type: "DISMISS_ALERT"; deliveryId: string }
   | { type: "SET_ACTIVE_DELIVERY"; deliveryId: string | null };
 
 interface DeliveryContextValue extends DeliveryState {
-  /** Accept an assigned delivery */
   acceptDelivery: (deliveryId: string) => void;
-  /** Reject / decline a delivery */
   rejectDelivery: (deliveryId: string) => void;
-  /** Mark as picked up */
   pickUpDelivery: (deliveryId: string) => void;
-  /** Start delivery — begins live location tracking */
   startDelivery: (deliveryId: string) => void;
-  /** Complete / mark as delivered — stops tracking */
   completeDelivery: (deliveryId: string) => void;
-  /** Report failed delivery */
   failDelivery: (deliveryId: string) => void;
-  /** Hand off to carrier (AIR/SEA) — pauses GPS tracking */
   handOffDelivery: (deliveryId: string) => void;
-  /** Dismiss the new-assignment alert toast */
   dismissAlert: (deliveryId: string) => void;
+  refreshDeliveries: () => void;
 }
 
 /* ─── Reducer ─── */
@@ -56,7 +52,10 @@ interface DeliveryContextValue extends DeliveryState {
 function reducer(state: DeliveryState, action: DeliveryAction): DeliveryState {
   switch (action.type) {
     case "SET_DELIVERIES":
-      return { ...state, deliveries: action.deliveries };
+      return { ...state, deliveries: action.deliveries, loading: false };
+
+    case "SET_LOADING":
+      return { ...state, loading: action.loading };
 
     case "UPDATE_STATUS":
       return {
@@ -64,7 +63,6 @@ function reducer(state: DeliveryState, action: DeliveryAction): DeliveryState {
         deliveries: state.deliveries.map((d) =>
           d.id === action.deliveryId ? { ...d, status: action.status } : d,
         ),
-        // If delivered, failed, or handed off, clear active tracking
         activeDeliveryId:
           (action.status === "delivered" || action.status === "failed" || action.status === "handed_off") &&
           state.activeDeliveryId === action.deliveryId
@@ -107,21 +105,38 @@ export function useDeliveries() {
 
 export function DeliveryProvider({ children }: { children: ReactNode }) {
   const { socket } = useSocket();
+  const { driver } = useAuth();
+  const driverId = driver?.id;
 
   const [state, dispatch] = useReducer(reducer, {
-    deliveries: DELIVERIES,
+    deliveries: [],
+    loading: true,
     activeDeliveryId: null,
     alerts: [],
   });
 
+  /* ── Fetch deliveries from API ── */
+  const refreshDeliveries = useCallback(() => {
+    if (!driverId) return;
+    dispatch({ type: "SET_LOADING", loading: true });
+    getDriverDeliveries(driverId)
+      .then((deliveries) => dispatch({ type: "SET_DELIVERIES", deliveries }))
+      .catch((err) => {
+        console.error("Failed to fetch deliveries:", err);
+        dispatch({ type: "SET_LOADING", loading: false });
+      });
+  }, [driverId]);
+
+  useEffect(() => {
+    refreshDeliveries();
+  }, [refreshDeliveries]);
+
   /* ── Socket listeners ── */
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !driverId) return;
 
-    // Admin assigns a new delivery to this driver
     const onNewAssignment = (delivery: Delivery) => {
       dispatch({ type: "NEW_ASSIGNMENT", delivery });
-      // Play notification sound if available
       try {
         const audio = new Audio("/notification.mp3");
         audio.volume = 0.5;
@@ -131,41 +146,61 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // Admin or system updates a delivery status
-    const onStatusUpdate = (data: { deliveryId: string; status: DeliveryStatus }) => {
-      dispatch({ type: "UPDATE_STATUS", deliveryId: data.deliveryId, status: data.status });
+    const onStatusUpdate = (data: { deliveryId?: string; shipmentId?: string; newStatus?: string; status?: DeliveryStatus }) => {
+      const id = data.deliveryId || data.shipmentId;
+      if (!id) return;
+      // Map backend status strings to frontend status
+      const statusMap: Record<string, DeliveryStatus> = {
+        PENDING: "pending",
+        QUOTED: "pending",
+        ACCEPTED: "assigned",
+        PICKED_UP: "picked_up",
+        IN_TRANSIT: "in_transit",
+        HANDED_OFF: "handed_off",
+        DELIVERED: "delivered",
+        CANCELLED: "failed",
+      };
+      const raw = data.newStatus || data.status || "";
+      const mapped = statusMap[raw] || (raw as DeliveryStatus);
+      dispatch({ type: "UPDATE_STATUS", deliveryId: id, status: mapped });
     };
 
     socket.on("delivery:assigned", onNewAssignment);
     socket.on("delivery:status-updated", onStatusUpdate);
-
-    // Register driver with server
-    socket.emit("driver:register", { driverId: CURRENT_DRIVER.id });
+    socket.on("delivery:status-confirmed", onStatusUpdate);
 
     return () => {
       socket.off("delivery:assigned", onNewAssignment);
       socket.off("delivery:status-updated", onStatusUpdate);
+      socket.off("delivery:status-confirmed", onStatusUpdate);
     };
-  }, [socket]);
+  }, [socket, driverId]);
 
-  /* ── Actions ── */
+  /* ── Actions — call REST API + emit socket ── */
 
   const emitStatus = useCallback(
-    (deliveryId: string, status: DeliveryStatus) => {
-      dispatch({ type: "UPDATE_STATUS", deliveryId, status });
+    (deliveryId: string, action: string, frontendStatus: DeliveryStatus) => {
+      if (!driverId) return;
+      // Optimistic update
+      dispatch({ type: "UPDATE_STATUS", deliveryId, status: frontendStatus });
+      // Call REST API
+      apiUpdateStatus(deliveryId, driverId, action).catch((err) => {
+        console.error(`Failed to update status (${action}):`, err);
+        // Refresh to get real state on error
+        refreshDeliveries();
+      });
+      // Also emit via socket for real-time
       socket?.emit("delivery:status-change", {
-        deliveryId,
-        driverId: CURRENT_DRIVER.id,
-        status,
-        timestamp: new Date().toISOString(),
+        shipmentId: deliveryId,
+        driverId,
+        action,
       });
     },
-    [socket],
+    [socket, driverId, refreshDeliveries],
   );
 
   const acceptDelivery = useCallback(
     (deliveryId: string) => {
-      // Block accepting if driver already has an active delivery
       const hasActive = state.deliveries.some(
         (d) =>
           d.id !== deliveryId &&
@@ -177,7 +212,7 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
         alert("You must complete your current delivery before accepting a new one.");
         return;
       }
-      emitStatus(deliveryId, "assigned");
+      emitStatus(deliveryId, "accept", "assigned");
       dispatch({ type: "DISMISS_ALERT", deliveryId });
     },
     [emitStatus, state.deliveries],
@@ -186,53 +221,41 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
   const rejectDelivery = useCallback(
     (deliveryId: string) => {
       dispatch({ type: "DISMISS_ALERT", deliveryId });
+      if (!driverId) return;
       socket?.emit("delivery:rejected", {
         deliveryId,
-        driverId: CURRENT_DRIVER.id,
+        driverId,
         timestamp: new Date().toISOString(),
       });
-      // Remove from list
       dispatch({ type: "UPDATE_STATUS", deliveryId, status: "failed" });
     },
-    [socket],
+    [socket, driverId],
   );
 
   const pickUpDelivery = useCallback(
-    (deliveryId: string) => emitStatus(deliveryId, "picked_up"),
+    (deliveryId: string) => emitStatus(deliveryId, "pickup", "picked_up"),
     [emitStatus],
   );
 
   const startDelivery = useCallback(
     (deliveryId: string) => {
-      emitStatus(deliveryId, "in_transit");
+      emitStatus(deliveryId, "start", "in_transit");
       dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId });
-      // The useLocationTracking hook in Tracking page will
-      // automatically start broadcasting when activeDeliveryId is set
-      socket?.emit("driver:delivery-started", {
-        deliveryId,
-        driverId: CURRENT_DRIVER.id,
-        timestamp: new Date().toISOString(),
-      });
     },
-    [emitStatus, socket],
+    [emitStatus],
   );
 
   const completeDelivery = useCallback(
     (deliveryId: string) => {
-      emitStatus(deliveryId, "delivered");
+      emitStatus(deliveryId, "complete", "delivered");
       dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId: null });
-      socket?.emit("driver:delivery-completed", {
-        deliveryId,
-        driverId: CURRENT_DRIVER.id,
-        timestamp: new Date().toISOString(),
-      });
     },
-    [emitStatus, socket],
+    [emitStatus],
   );
 
   const failDelivery = useCallback(
     (deliveryId: string) => {
-      emitStatus(deliveryId, "failed");
+      emitStatus(deliveryId, "fail", "failed");
       dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId: null });
     },
     [emitStatus],
@@ -240,11 +263,11 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
 
   const handOffDelivery = useCallback(
     (deliveryId: string) => {
-      emitStatus(deliveryId, "handed_off");
+      emitStatus(deliveryId, "handoff", "handed_off");
       dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId: null });
-      socket?.emit("driver:tracking-stopped", { driverId: CURRENT_DRIVER.id });
+      socket?.emit("driver:tracking-stopped", { driverId });
     },
-    [emitStatus, socket],
+    [emitStatus, socket, driverId],
   );
 
   const dismissAlert = useCallback(
@@ -264,6 +287,7 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
         failDelivery,
         handOffDelivery,
         dismissAlert,
+        refreshDeliveries,
       }}
     >
       {children}

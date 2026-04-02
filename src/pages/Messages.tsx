@@ -10,8 +10,11 @@ import {
   Info,
   ChevronDown,
   Headphones,
+  Loader2,
 } from "lucide-react";
-import { ADMIN_MESSAGES, CURRENT_DRIVER } from "../data/mock";
+import { useAuth } from "../contexts/AuthContext";
+import { useSocket } from "../contexts/SocketContext";
+import { getMessages, sendMessage as apiSendMessage, markMessagesRead } from "../services/api";
 import type { Message } from "../types";
 
 function formatTime(ts: string): string {
@@ -39,6 +42,19 @@ function getMessageMeta(content: string) {
   return { icon: Info, rgb: "100,116,139", label: "" };
 }
 
+/** Map backend DriverMessage to frontend Message type */
+function mapBackendMessage(m: any): Message {
+  return {
+    id: m.id,
+    senderId: m.sender === "driver" ? m.driverId : "admin-001",
+    senderName: m.sender === "driver" ? "You" : "Admin",
+    content: m.text,
+    timestamp: m.createdAt,
+    isDriver: m.sender === "driver",
+    read: m.read,
+  };
+}
+
 const QUICK_REPLIES = [
   "On my way",
   "Arrived at pickup",
@@ -49,9 +65,12 @@ const QUICK_REPLIES = [
 ];
 
 export default function Messages() {
-  const [messages, setMessages] = useState<Message[]>(() =>
-    JSON.parse(JSON.stringify(ADMIN_MESSAGES)),
-  );
+  const { driver } = useAuth();
+  const { socket } = useSocket();
+  const driverId = driver?.id;
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
@@ -65,6 +84,51 @@ export default function Messages() {
   const scrollToBottom = useCallback(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
+
+  // Fetch messages from API
+  useEffect(() => {
+    if (!driverId) return;
+    setLoading(true);
+    getMessages(driverId)
+      .then((data: any[]) => {
+        // API returns newest first, reverse for chronological order
+        const mapped = data.map(mapBackendMessage).reverse();
+        setMessages(mapped);
+      })
+      .catch((err) => console.error("Failed to fetch messages:", err))
+      .finally(() => setLoading(false));
+  }, [driverId]);
+
+  // Listen for real-time messages via socket
+  useEffect(() => {
+    if (!socket || !driverId) return;
+
+    const onNewMessage = (msg: any) => {
+      if (msg.driverId !== driverId && msg.driverId !== undefined) return;
+      const mapped = mapBackendMessage(msg);
+      setMessages((prev) => {
+        // Dedupe by id
+        if (prev.some((m) => m.id === mapped.id)) return prev;
+        return [...prev, mapped];
+      });
+    };
+
+    const onMessagesRead = (data: { driverId: string; readBy: string }) => {
+      if (data.driverId !== driverId) return;
+      if (data.readBy === "admin") {
+        // Our (driver) messages were read by admin
+        setMessages((prev) => prev.map((m) => (m.isDriver ? { ...m, read: true } : m)));
+      }
+    };
+
+    socket.on("message:new", onNewMessage);
+    socket.on("message:read", onMessagesRead);
+
+    return () => {
+      socket.off("message:new", onNewMessage);
+      socket.off("message:read", onMessagesRead);
+    };
+  }, [socket, driverId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -84,18 +148,24 @@ export default function Messages() {
 
   // Mark messages read when scrolled to bottom
   useEffect(() => {
-    if (!showScrollBtn && unreadCount > 0) {
+    if (!showScrollBtn && unreadCount > 0 && driverId) {
       setMessages((prev) => prev.map((m) => (!m.isDriver && !m.read ? { ...m, read: true } : m)));
+      // Tell backend
+      markMessagesRead(driverId, "driver").catch(() => {});
+      socket?.emit("message:read", { driverId, readBy: "driver" });
     }
-  }, [showScrollBtn, unreadCount]);
+  }, [showScrollBtn, unreadCount, driverId, socket]);
 
   function handleSend(text?: string) {
     const content = (text || input).trim();
-    if (!content) return;
+    if (!content || !driverId) return;
+
+    // Optimistic local message
+    const tempId = `msg-drv-${Date.now()}`;
     const newMsg: Message = {
-      id: `msg-drv-${Date.now()}`,
-      senderId: CURRENT_DRIVER.id,
-      senderName: CURRENT_DRIVER.name,
+      id: tempId,
+      senderId: driverId,
+      senderName: driver?.driverName || "You",
       content,
       timestamp: new Date().toISOString(),
       isDriver: true,
@@ -105,6 +175,13 @@ export default function Messages() {
     setInput("");
     setShowQuickReplies(false);
     inputRef.current?.focus();
+
+    // Send via API
+    apiSendMessage(driverId, "driver", content).catch((err) =>
+      console.error("Failed to send message:", err),
+    );
+    // Also emit via socket for real-time
+    socket?.emit("message:send", { driverId, sender: "driver", text: content });
   }
 
   // Group by date
@@ -118,7 +195,7 @@ export default function Messages() {
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - var(--topbar-h, 64px) - 32px)", maxWidth: 720, margin: "0 auto", width: "100%" }}>
-      {/* ═══ Header ═══ */}
+      {/* Header */}
       <div
         className="flex items-center gap-3 px-4 sm:px-5 py-3"
         style={{
@@ -129,7 +206,6 @@ export default function Messages() {
           flexShrink: 0,
         }}
       >
-        {/* Admin avatar */}
         <div style={{ position: "relative", flexShrink: 0 }}>
           <div style={{
             width: 44, height: 44, borderRadius: 14,
@@ -146,7 +222,6 @@ export default function Messages() {
           }} />
         </div>
 
-        {/* Info */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="flex items-center gap-2">
             <h2 style={{ fontSize: 15, fontWeight: 700, color: "#fff", margin: 0 }}>Admin Operations</h2>
@@ -156,7 +231,6 @@ export default function Messages() {
           </p>
         </div>
 
-        {/* Unread badge */}
         {unreadCount > 0 && (
           <span style={{
             minWidth: 22, height: 22, borderRadius: 11,
@@ -169,7 +243,6 @@ export default function Messages() {
           </span>
         )}
 
-        {/* Support */}
         <button style={{ width: 36, height: 36, borderRadius: 10, border: "none", background: "rgba(255,255,255,0.04)", color: "var(--text-tertiary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 150ms" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "var(--text-tertiary)"; }}
@@ -179,7 +252,7 @@ export default function Messages() {
         </button>
       </div>
 
-      {/* ═══ Message Feed ═══ */}
+      {/* Message Feed */}
       <div
         ref={feedRef}
         className="flex-1 overflow-y-auto px-3 sm:px-5 py-4"
@@ -203,107 +276,110 @@ export default function Messages() {
           </p>
         </div>
 
-        {grouped.map((group) => (
-          <div key={group.date} className="flex flex-col" style={{ gap: 3 }}>
-            {/* Date divider */}
-            <div className="flex items-center justify-center py-3">
-              <span style={{
-                fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)",
-                letterSpacing: "0.04em", padding: "3px 12px", borderRadius: 8,
-                background: "rgba(255,255,255,0.04)",
-              }}>
-                {formatDateHeader(group.msgs[0].timestamp)}
-              </span>
-            </div>
+        {loading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+            <Loader2 size={24} className="animate-spin" style={{ color: "var(--text-tertiary)" }} />
+          </div>
+        ) : (
+          grouped.map((group) => (
+            <div key={group.date} className="flex flex-col" style={{ gap: 3 }}>
+              {/* Date divider */}
+              <div className="flex items-center justify-center py-3">
+                <span style={{
+                  fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)",
+                  letterSpacing: "0.04em", padding: "3px 12px", borderRadius: 8,
+                  background: "rgba(255,255,255,0.04)",
+                }}>
+                  {formatDateHeader(group.msgs[0].timestamp)}
+                </span>
+              </div>
 
-            {group.msgs.map((msg, idx) => {
-              const prevMsg = idx > 0 ? group.msgs[idx - 1] : null;
-              const isConsecutive = prevMsg && prevMsg.isDriver === msg.isDriver &&
-                new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime() < 300000;
+              {group.msgs.map((msg, idx) => {
+                const prevMsg = idx > 0 ? group.msgs[idx - 1] : null;
+                const isConsecutive = prevMsg && prevMsg.isDriver === msg.isDriver &&
+                  new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime() < 300000;
 
-              if (msg.isDriver) {
+                if (msg.isDriver) {
+                  return (
+                    <div key={msg.id} style={{ display: "flex", justifyContent: "flex-end", marginTop: isConsecutive ? 1 : 8 }}>
+                      <div style={{
+                        maxWidth: "80%", padding: "9px 13px",
+                        borderRadius: isConsecutive ? "14px 4px 4px 14px" : "14px 14px 4px 14px",
+                        background: "linear-gradient(135deg, #2563eb, #3b82f6)",
+                        boxShadow: "0 1px 4px rgba(59,130,246,0.15)",
+                      }}>
+                        <p style={{ fontSize: 13, lineHeight: 1.55, color: "#fff", margin: 0, wordBreak: "break-word" }}>
+                          {msg.content}
+                        </p>
+                        <div className="flex items-center justify-end gap-1" style={{ marginTop: 3 }}>
+                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.45)" }}>{formatTime(msg.timestamp)}</span>
+                          {msg.read
+                            ? <CheckCheck size={12} style={{ color: "rgba(255,255,255,0.65)" }} />
+                            : <Check size={12} style={{ color: "rgba(255,255,255,0.35)" }} />
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Admin message
+                const meta = getMessageMeta(msg.content);
+                const Icon = meta.icon;
                 return (
-                  <div key={msg.id} style={{ display: "flex", justifyContent: "flex-end", marginTop: isConsecutive ? 1 : 8 }}>
+                  <div key={msg.id} style={{ display: "flex", justifyContent: "flex-start", gap: 6, marginTop: isConsecutive ? 1 : 8 }}>
+                    {!isConsecutive ? (
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                        background: `rgba(${meta.rgb},0.1)`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        marginTop: 2,
+                      }}>
+                        <Icon size={14} style={{ color: `rgb(${meta.rgb})` }} />
+                      </div>
+                    ) : (
+                      <div style={{ width: 28, flexShrink: 0 }} />
+                    )}
+
                     <div style={{
                       maxWidth: "80%", padding: "9px 13px",
-                      borderRadius: isConsecutive ? "14px 4px 4px 14px" : "14px 14px 4px 14px",
-                      background: "linear-gradient(135deg, #2563eb, #3b82f6)",
-                      boxShadow: "0 1px 4px rgba(59,130,246,0.15)",
+                      borderRadius: isConsecutive ? "4px 14px 14px 14px" : "4px 14px 14px 14px",
+                      background: !msg.read
+                        ? `linear-gradient(145deg, rgba(${meta.rgb},0.06), rgba(${meta.rgb},0.015))`
+                        : "#1a2536",
+                      border: !msg.read
+                        ? `1px solid rgba(${meta.rgb},0.12)`
+                        : "1px solid rgba(255,255,255,0.04)",
+                      position: "relative",
                     }}>
-                      <p style={{ fontSize: 13, lineHeight: 1.55, color: "#fff", margin: 0, wordBreak: "break-word" }}>
+                      {!msg.read && (
+                        <div style={{
+                          position: "absolute", top: 5, right: 5,
+                          width: 5, height: 5, borderRadius: "50%",
+                          background: `rgb(${meta.rgb})`,
+                          boxShadow: `0 0 4px rgba(${meta.rgb},0.5)`,
+                        }} />
+                      )}
+
+                      {!isConsecutive && meta.label && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: `rgb(${meta.rgb})`, letterSpacing: "0.06em", textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                          {meta.label}
+                        </span>
+                      )}
+
+                      <p style={{ fontSize: 13, lineHeight: 1.55, color: "#fff", fontWeight: msg.read ? 400 : 450, margin: 0, wordBreak: "break-word" }}>
                         {msg.content}
                       </p>
-                      <div className="flex items-center justify-end gap-1" style={{ marginTop: 3 }}>
-                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.45)" }}>{formatTime(msg.timestamp)}</span>
-                        {msg.read
-                          ? <CheckCheck size={12} style={{ color: "rgba(255,255,255,0.65)" }} />
-                          : <Check size={12} style={{ color: "rgba(255,255,255,0.35)" }} />
-                        }
+                      <div className="flex items-center gap-1" style={{ marginTop: 3 }}>
+                        <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{formatTime(msg.timestamp)}</span>
                       </div>
                     </div>
                   </div>
                 );
-              }
-
-              // Admin message
-              const meta = getMessageMeta(msg.content);
-              const Icon = meta.icon;
-              return (
-                <div key={msg.id} style={{ display: "flex", justifyContent: "flex-start", gap: 6, marginTop: isConsecutive ? 1 : 8 }}>
-                  {/* Category icon — only show on first in a group */}
-                  {!isConsecutive ? (
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                      background: `rgba(${meta.rgb},0.1)`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      marginTop: 2,
-                    }}>
-                      <Icon size={14} style={{ color: `rgb(${meta.rgb})` }} />
-                    </div>
-                  ) : (
-                    <div style={{ width: 28, flexShrink: 0 }} />
-                  )}
-
-                  <div style={{
-                    maxWidth: "80%", padding: "9px 13px",
-                    borderRadius: isConsecutive ? "4px 14px 14px 14px" : "4px 14px 14px 14px",
-                    background: !msg.read
-                      ? `linear-gradient(145deg, rgba(${meta.rgb},0.06), rgba(${meta.rgb},0.015))`
-                      : "#1a2536",
-                    border: !msg.read
-                      ? `1px solid rgba(${meta.rgb},0.12)`
-                      : "1px solid rgba(255,255,255,0.04)",
-                    position: "relative",
-                  }}>
-                    {/* Unread dot */}
-                    {!msg.read && (
-                      <div style={{
-                        position: "absolute", top: 5, right: 5,
-                        width: 5, height: 5, borderRadius: "50%",
-                        background: `rgb(${meta.rgb})`,
-                        boxShadow: `0 0 4px rgba(${meta.rgb},0.5)`,
-                      }} />
-                    )}
-
-                    {/* Category label for alerts */}
-                    {!isConsecutive && meta.label && (
-                      <span style={{ fontSize: 9, fontWeight: 700, color: `rgb(${meta.rgb})`, letterSpacing: "0.06em", textTransform: "uppercase", display: "block", marginBottom: 3 }}>
-                        {meta.label}
-                      </span>
-                    )}
-
-                    <p style={{ fontSize: 13, lineHeight: 1.55, color: "#fff", fontWeight: msg.read ? 400 : 450, margin: 0, wordBreak: "break-word" }}>
-                      {msg.content}
-                    </p>
-                    <div className="flex items-center gap-1" style={{ marginTop: 3 }}>
-                      <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{formatTime(msg.timestamp)}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ))}
+              })}
+            </div>
+          ))
+        )}
         <div ref={endRef} />
 
         {/* Scroll to bottom button */}
@@ -331,7 +407,7 @@ export default function Messages() {
         )}
       </div>
 
-      {/* ═══ Quick Replies ═══ */}
+      {/* Quick Replies */}
       {showQuickReplies && (
         <div className="flex gap-1.5 px-3 sm:px-5 py-2 overflow-x-auto" style={{
           background: "#141c2c", borderLeft: "1px solid var(--border-soft)", borderRight: "1px solid var(--border-soft)",
@@ -354,18 +430,17 @@ export default function Messages() {
         </div>
       )}
 
-      {/* ═══ Input Bar ═══ */}
+      {/* Input Bar */}
       <div
         className="flex items-center gap-2 px-3 sm:px-4 py-3"
         style={{
           background: "linear-gradient(145deg, #1a2332, #141c2c)",
-          borderRadius: showQuickReplies ? "0 0 16px 16px" : "0 0 16px 16px",
+          borderRadius: "0 0 16px 16px",
           border: "1px solid var(--border-soft)",
           borderTop: showQuickReplies ? "none" : "1px solid var(--border-soft)",
           flexShrink: 0,
         }}
       >
-        {/* Quick reply toggle */}
         <button
           onClick={() => setShowQuickReplies((p) => !p)}
           style={{
@@ -380,7 +455,6 @@ export default function Messages() {
           ⚡
         </button>
 
-        {/* Text input */}
         <input
           ref={inputRef}
           type="text"
@@ -406,7 +480,6 @@ export default function Messages() {
           }}
         />
 
-        {/* Send */}
         <button
           onClick={() => handleSend()}
           disabled={!input.trim()}

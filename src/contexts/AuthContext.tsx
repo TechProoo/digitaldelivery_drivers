@@ -45,25 +45,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    // Dev test account — bypasses backend API
-    if (email === "ola@gmail.com" && password === "Ola123-") {
-      const devDriver: Driver = {
-        id: "dev-driver-001",
-        driverName: "Ola Driver",
-        driverEmail: "ola@gmail.com",
-        driverPhone: "+234 800 000 0000",
-        vehicleType: "Van",
-        plateNumber: "LAG-001-OD",
-        applicationStatus: "APPROVED",
-        status: "AVAILABLE",
-      };
-      localStorage.setItem("driver_token", "dev-token-ola");
-      localStorage.setItem("driver_data", JSON.stringify(devDriver));
-      setToken("dev-token-ola");
-      setDriver(devDriver);
-      return;
-    }
-
     const res = await fetch(`${API_BASE}/driver-auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -75,7 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(error.message || "Login failed");
     }
 
-    const data: { access_token: string; driver: Driver } = await res.json();
+    const json = await res.json();
+    // Backend wraps in { success, data, message }
+    const data: { access_token: string; driver: Driver } = json.data ?? json;
 
     localStorage.setItem("driver_token", data.access_token);
     localStorage.setItem("driver_data", JSON.stringify(data.driver));

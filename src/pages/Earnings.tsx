@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { EARNINGS_SUMMARY, EARNINGS_CHART, DELIVERIES } from "../data/mock";
+import { useDeliveries } from "../contexts/DeliveryContext";
 
 function formatNaira(amount: number): string {
   return new Intl.NumberFormat("en-NG", {
@@ -53,13 +53,49 @@ function ChartTooltip({ active, payload, label }: any) {
 
 export default function Earnings() {
   const [period, setPeriod] = useState<"week" | "month">("week");
+  const { deliveries } = useDeliveries();
 
-  const deliveredOrders = DELIVERIES.filter((d) => d.status === "delivered");
+  const deliveredOrders = deliveries.filter((d) => d.status === "delivered");
+
+  // Compute earnings from real data
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const todayEarnings = deliveredOrders
+    .filter((d) => new Date(d.scheduledAt) >= startOfToday)
+    .reduce((s, d) => s + d.earnings, 0);
+  const weekEarnings = deliveredOrders
+    .filter((d) => new Date(d.scheduledAt) >= startOfWeek)
+    .reduce((s, d) => s + d.earnings, 0);
+  const monthEarnings = deliveredOrders
+    .filter((d) => new Date(d.scheduledAt) >= startOfMonth)
+    .reduce((s, d) => s + d.earnings, 0);
+  const pendingEarnings = deliveries
+    .filter((d) => d.status !== "delivered" && d.status !== "failed")
+    .reduce((s, d) => s + d.earnings, 0);
+
+  // Build weekly chart from real data
+  const EARNINGS_CHART = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startOfWeek);
+    d.setDate(d.getDate() + i);
+    const dayStr = d.toDateString();
+    const dayDeliveries = deliveredOrders.filter(
+      (del) => new Date(del.scheduledAt).toDateString() === dayStr,
+    );
+    return {
+      day: d.toLocaleDateString("en-NG", { weekday: "short" }),
+      amount: dayDeliveries.reduce((s, del) => s + del.earnings, 0),
+      deliveries: dayDeliveries.length,
+    };
+  });
 
   const summaryCards = [
     {
       label: "Today's Earnings",
-      value: formatNaira(EARNINGS_SUMMARY.today),
+      value: formatNaira(todayEarnings),
       icon: <DollarSign size={24} />,
       color: "34,197,94",
       accent: "var(--accent-green)",
@@ -82,7 +118,7 @@ export default function Earnings() {
     },
     {
       label: "This Week",
-      value: formatNaira(EARNINGS_SUMMARY.week),
+      value: formatNaira(weekEarnings),
       icon: <Calendar size={24} />,
       color: "59,130,246",
       accent: "var(--accent-blue)",
@@ -90,7 +126,7 @@ export default function Earnings() {
     },
     {
       label: "This Month",
-      value: formatNaira(EARNINGS_SUMMARY.month),
+      value: formatNaira(monthEarnings),
       icon: <Wallet size={24} />,
       color: "168,85,247",
       accent: "var(--accent-purple)",
@@ -98,7 +134,7 @@ export default function Earnings() {
     },
     {
       label: "Pending Payout",
-      value: formatNaira(EARNINGS_SUMMARY.pending),
+      value: formatNaira(pendingEarnings),
       icon: <CreditCard size={24} />,
       color: "245,158,11",
       accent: "var(--accent-amber)",

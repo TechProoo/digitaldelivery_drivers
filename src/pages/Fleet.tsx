@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { VEHICLE, CURRENT_DRIVER } from "../data/mock";
+import { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useDeliveries } from "../contexts/DeliveryContext";
+import { getBankDetails, updateBankDetails as apiUpdateBankDetails } from "../services/api";
 import {
   Truck,
   Wrench,
@@ -45,13 +47,32 @@ function daysUntil(dateStr: string): number {
 }
 
 export default function Fleet() {
-  const v = VEHICLE;
-  const isActive = v.status === "active";
+  const { driver } = useAuth();
+  const { deliveries } = useDeliveries();
+  const allCompleted = deliveries.filter((d) => d.status === "delivered");
 
-  const insuranceDays = daysUntil(v.insurance);
-  const serviceDays = daysUntil(v.nextService);
-  const insuranceExpired = isExpired(v.insurance);
-  const serviceOverdue = isExpired(v.nextService);
+  // Build vehicle info from driver data (backend doesn't have a separate vehicle model)
+  const v = {
+    type: driver?.vehicleType || "—",
+    make: "—",
+    model: "—",
+    year: "—",
+    plate: driver?.plateNumber || "—",
+    color: "—",
+    mileage: 0,
+    status: "active" as const,
+    insurance: "",
+    lastService: "",
+    nextService: "",
+  };
+  const isActive = true;
+
+  const hasInsurance = Boolean(v.insurance);
+  const hasNextService = Boolean(v.nextService);
+  const insuranceDays = hasInsurance ? daysUntil(v.insurance) : 999;
+  const serviceDays = hasNextService ? daysUntil(v.nextService) : 999;
+  const insuranceExpired = hasInsurance && isExpired(v.insurance);
+  const serviceOverdue = hasNextService && isExpired(v.nextService);
 
   return (
     <div className="flex flex-col gap-5">
@@ -108,7 +129,7 @@ export default function Fleet() {
               className="text-xl md:text-2xl font-extrabold"
               style={{ color: "#fff", letterSpacing: "-0.02em", margin: 0 }}
             >
-              {v.make} {v.model}
+              {driver?.driverName || "My Vehicle"}
             </h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               {[String(v.year), v.color, v.type].map((label) => (
@@ -168,10 +189,10 @@ export default function Fleet() {
       </div>
 
       {/* ═══ Alerts (if any) ═══ */}
-      {(insuranceExpired ||
-        isWithin30Days(v.insurance) ||
+      {(hasInsurance || hasNextService) && (insuranceExpired ||
+        (hasInsurance && isWithin30Days(v.insurance)) ||
         serviceOverdue ||
-        isWithin30Days(v.nextService)) && (
+        (hasNextService && isWithin30Days(v.nextService))) && (
         <div className="flex flex-col gap-2">
           {(insuranceExpired || isWithin30Days(v.insurance)) && (
             <div
@@ -279,13 +300,13 @@ export default function Fleet() {
           },
           {
             label: "Rating",
-            value: `${CURRENT_DRIVER.rating}`,
+            value: "—",
             icon: <Star size={18} />,
             rgb: "245,158,11",
           },
           {
             label: "Deliveries",
-            value: CURRENT_DRIVER.totalDeliveries.toLocaleString(),
+            value: allCompleted.length.toLocaleString(),
             icon: <Truck size={18} />,
             rgb: "34,197,94",
           },
@@ -666,25 +687,49 @@ export default function Fleet() {
    ═══════════════════════════════════════ */
 
 function BankDetailsSection() {
+  const { driver } = useAuth();
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [bankName, setBankName] = useState(CURRENT_DRIVER.bankName);
-  const [bankAccount, setBankAccount] = useState(CURRENT_DRIVER.bankAccount);
-  const [bankAccountName, setBankAccountName] = useState(
-    CURRENT_DRIVER.bankAccountName,
-  );
+  const [loading, setLoading] = useState(true);
+  const [bankName, setBankName] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankAccountName, setBankAccountName] = useState("");
+
+  // Fetch bank details from API on mount
+  useEffect(() => {
+    if (!driver?.id) return;
+    getBankDetails(driver.id)
+      .then((data) => {
+        setBankName(data.bankName || "");
+        setBankAccount(data.bankAccount || "");
+        setBankAccountName(data.bankAccountName || "");
+      })
+      .catch(() => {
+        // Use whatever we have from driver object
+        setBankName(driver.bankName || "");
+        setBankAccount(driver.bankAccount || "");
+        setBankAccountName(driver.bankAccountName || "");
+      })
+      .finally(() => setLoading(false));
+  }, [driver?.id]);
 
   const hasDetails = bankName && bankAccount && bankAccountName;
 
   function handleSave() {
-    // In production this would call the API
-    CURRENT_DRIVER.bankName = bankName;
-    CURRENT_DRIVER.bankAccount = bankAccount;
-    CURRENT_DRIVER.bankAccountName = bankAccountName;
-    setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    if (!driver?.id) return;
+    apiUpdateBankDetails(driver.id, { bankName, bankAccount, bankAccountName })
+      .then(() => {
+        setEditing(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      })
+      .catch((err) => {
+        console.error("Failed to save bank details:", err);
+        alert("Failed to save bank details. Please try again.");
+      });
   }
+
+  if (loading) return null;
 
   const inputStyle = (): React.CSSProperties => ({
     width: "100%",
@@ -1063,9 +1108,9 @@ function BankDetailsSection() {
               <button
                 onClick={() => {
                   setEditing(false);
-                  setBankName(CURRENT_DRIVER.bankName);
-                  setBankAccount(CURRENT_DRIVER.bankAccount);
-                  setBankAccountName(CURRENT_DRIVER.bankAccountName);
+                  setBankName(driver?.bankName || "");
+                  setBankAccount(driver?.bankAccount || "");
+                  setBankAccountName(driver?.bankAccountName || "");
                 }}
                 style={{
                   height: 40,

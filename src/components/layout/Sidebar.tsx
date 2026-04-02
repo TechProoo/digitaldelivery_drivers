@@ -16,7 +16,6 @@ import {
   X,
   LogOut,
 } from "lucide-react";
-import { CURRENT_DRIVER } from "../../data/mock";
 import { useAuth } from "../../contexts/AuthContext";
 import Logo from "../../assets/logo_2.png";
 
@@ -74,10 +73,9 @@ export default function Sidebar() {
   const { isOpen, close } = useSidebar();
   const { logout, driver: authDriver } = useAuth();
 
-  // Use auth driver data if available, fall back to mock
-  const driverName = authDriver?.driverName || CURRENT_DRIVER.name;
-  const driverVehicleType = authDriver?.vehicleType || CURRENT_DRIVER.vehicleType;
-  const driverRating = CURRENT_DRIVER.rating;
+  const driverName = authDriver?.driverName || "Driver";
+  const driverVehicleType = authDriver?.vehicleType || "—";
+  const driverRating = "—";
 
   const sidebarContent = (
     <div

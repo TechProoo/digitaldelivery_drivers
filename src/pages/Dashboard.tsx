@@ -6,9 +6,6 @@ import {
   DollarSign,
   MapPin,
   Clock,
-  MessageSquare,
-  Settings,
-  Bell,
   TrendingUp,
   Navigation,
   Zap,
@@ -19,9 +16,9 @@ import {
   Flame,
   ArrowUpRight,
 } from "lucide-react";
-import { EARNINGS_SUMMARY, CURRENT_DRIVER, NOTIFICATIONS, EARNINGS_CHART } from "../data/mock";
 import { STATUS_CONFIG } from "../types";
 import { useDeliveries } from "../contexts/DeliveryContext";
+import { useAuth } from "../contexts/AuthContext";
 
 function formatNaira(amount: number): string {
   return new Intl.NumberFormat("en-NG", {
@@ -111,28 +108,37 @@ function Sparkline({ data }: { data: number[] }) {
   );
 }
 
-const NOTIF_ICONS: Record<string, React.ReactNode> = {
-  delivery: <Package size={16} />,
-  message: <MessageSquare size={16} />,
-  earnings: <DollarSign size={16} />,
-  system: <Settings size={16} />,
-};
-
-const NOTIF_RGB: Record<string, string> = {
-  delivery: "59,130,246",
-  message: "168,85,247",
-  earnings: "34,197,94",
-  system: "245,158,11",
-};
-
 export default function Dashboard() {
   const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
   const { deliveries, activeDeliveryId, pickUpDelivery, startDelivery, completeDelivery } = useDeliveries();
-  const firstName = CURRENT_DRIVER.name.split(" ")[0];
+  const { driver } = useAuth();
+  const firstName = (driver?.driverName || "Driver").split(" ")[0];
+
   const todayDeliveries = deliveries.filter((d) => isToday(d.scheduledAt));
   const completedDeliveries = todayDeliveries.filter((d) => d.status === "delivered");
   const activeDeliveries = todayDeliveries.filter((d) => d.status !== "delivered" && d.status !== "failed");
   const distanceCovered = completedDeliveries.reduce((sum, d) => sum + d.distance, 0);
+
+  // Compute earnings from real delivery data
+  const todayEarnings = completedDeliveries.reduce((sum, d) => sum + d.earnings, 0);
+  const allCompleted = deliveries.filter((d) => d.status === "delivered");
+  const weekEarnings = allCompleted.reduce((sum, d) => sum + d.earnings, 0);
+  const pendingEarnings = deliveries
+    .filter((d) => d.status !== "delivered" && d.status !== "failed")
+    .reduce((sum, d) => sum + d.earnings, 0);
+
+  // Build sparkline from the last 7 days of completed deliveries
+  const sparkData = (() => {
+    const now = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (6 - i));
+      const dayStr = d.toDateString();
+      return allCompleted
+        .filter((del) => new Date(del.scheduledAt).toDateString() === dayStr)
+        .reduce((sum, del) => sum + del.earnings, 0);
+    });
+  })();
 
   const formattedDate = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -140,9 +146,6 @@ export default function Dashboard() {
     month: "long",
     year: "numeric",
   });
-
-  const recentNotifs = NOTIFICATIONS.slice(0, 4);
-  const sparkData = EARNINGS_CHART.map((d) => d.amount);
 
   return (
     <div className="flex flex-col gap-6">
@@ -180,13 +183,13 @@ export default function Dashboard() {
             <div className="flex items-center gap-4 mt-4 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <Star size={13} style={{ color: "#f59e0b" }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{CURRENT_DRIVER.rating}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{driver?.rating ?? "—"}</span>
                 <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>rating</span>
               </div>
               <div style={{ width: 1, height: 16, background: "var(--border-soft)" }} />
               <div className="flex items-center gap-1.5">
                 <Flame size={13} style={{ color: "#ef4444" }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{CURRENT_DRIVER.totalDeliveries}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{allCompleted.length}</span>
                 <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>total deliveries</span>
               </div>
               <div style={{ width: 1, height: 16, background: "var(--border-soft)" }} />
@@ -208,11 +211,11 @@ export default function Dashboard() {
               <ArrowUpRight size={12} style={{ color: "#22c55e" }} />
             </div>
             <p style={{ fontSize: 22, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: 8 }}>
-              {formatNaira(EARNINGS_SUMMARY.today)}
+              {formatNaira(todayEarnings)}
             </p>
             <Sparkline data={sparkData} />
             <p style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 6 }}>
-              This week: <span style={{ color: "#22c55e", fontWeight: 700 }}>{formatNaira(EARNINGS_SUMMARY.week)}</span>
+              This week: <span style={{ color: "#22c55e", fontWeight: 700 }}>{formatNaira(weekEarnings)}</span>
             </p>
           </div>
         </div>
@@ -226,7 +229,7 @@ export default function Dashboard() {
           { label: "Today's Deliveries", value: todayDeliveries.length, icon: <Package size={20} />, rgb: "59,130,246", accent: "#3b82f6" },
           { label: "Completed", value: completedDeliveries.length, icon: <CheckCircle2 size={20} />, rgb: "34,197,94", accent: "#22c55e" },
           { label: "Active", value: activeDeliveries.length, icon: <Navigation size={20} />, rgb: "168,85,247", accent: "#a855f7" },
-          { label: "Pending Payout", value: formatNaira(EARNINGS_SUMMARY.pending), icon: <DollarSign size={20} />, rgb: "245,158,11", accent: "#f59e0b" },
+          { label: "Pending Payout", value: formatNaira(pendingEarnings), icon: <DollarSign size={20} />, rgb: "245,158,11", accent: "#f59e0b" },
         ].map((card) => (
           <div
             key={card.label}
@@ -439,54 +442,54 @@ export default function Dashboard() {
       </div>
 
       {/* ═══════════════════════════════════════
-          RECENT ACTIVITY
+          RECENT COMPLETED
           ═══════════════════════════════════════ */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold" style={{ color: "#fff" }}>Recent Activity</h2>
-            {NOTIFICATIONS.filter((n) => !n.read).length > 0 && (
-              <span style={{ minWidth: 18, height: 18, borderRadius: 6, background: "rgba(239,68,68,0.12)", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: "#ef4444" }}>{NOTIFICATIONS.filter((n) => !n.read).length}</span>
+            <h2 className="text-base font-bold" style={{ color: "#fff" }}>Recent Completed</h2>
+            {allCompleted.length > 0 && (
+              <span style={{ minWidth: 18, height: 18, borderRadius: 6, background: "rgba(34,197,94,0.12)", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color: "#22c55e" }}>{allCompleted.length}</span>
               </span>
             )}
           </div>
-          <Bell size={14} style={{ color: "var(--text-tertiary)" }} />
+          <CheckCircle2 size={14} style={{ color: "var(--text-tertiary)" }} />
         </div>
 
         <div style={{ background: "linear-gradient(145deg, #1a2332, #141c2c)", borderRadius: 14, border: "1px solid var(--border-soft)", overflow: "hidden" }}>
-          {recentNotifs.map((notif, idx) => {
-            const rgb = NOTIF_RGB[notif.type] || "100,116,139";
-            return (
+          {allCompleted.length === 0 ? (
+            <div style={{ padding: "30px 20px", textAlign: "center" }}>
+              <p style={{ fontSize: 13, color: "var(--text-tertiary)" }}>No completed deliveries yet</p>
+            </div>
+          ) : (
+            allCompleted.slice(0, 4).map((delivery, idx) => (
               <div
-                key={notif.id}
+                key={delivery.id}
                 className="flex items-start gap-3"
                 style={{
                   padding: "12px 16px",
-                  borderBottom: idx < recentNotifs.length - 1 ? "1px solid var(--border-soft)" : "none",
-                  cursor: "pointer",
+                  borderBottom: idx < Math.min(allCompleted.length, 4) - 1 ? "1px solid var(--border-soft)" : "none",
                   transition: "background 150ms",
-                  position: "relative",
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.015)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               >
-                {!notif.read && (
-                  <div style={{ position: "absolute", top: 16, left: 5, width: 5, height: 5, borderRadius: "50%", background: "#3b82f6", boxShadow: "0 0 6px rgba(59,130,246,0.5)" }} />
-                )}
-                <div style={{ width: 34, height: 34, borderRadius: 9, background: `rgba(${rgb},0.1)`, color: `rgb(${rgb})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  {NOTIF_ICONS[notif.type]}
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: "rgba(34,197,94,0.1)", color: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Package size={16} />
                 </div>
                 <div className="flex flex-col flex-1 gap-0.5 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <p style={{ fontSize: 12, fontWeight: notif.read ? 500 : 650, color: "#fff" }}>{notif.title}</p>
-                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", flexShrink: 0 }}>{getRelativeTime(notif.timestamp)}</span>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: "#fff" }}>{delivery.customerName}</p>
+                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", flexShrink: 0 }}>{getRelativeTime(delivery.scheduledAt)}</span>
                   </div>
-                  <p className="truncate" style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>{notif.body}</p>
+                  <p className="truncate" style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                    {delivery.trackingNumber} — {formatNaira(delivery.earnings)}
+                  </p>
                 </div>
               </div>
-            );
-          })}
+            ))
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,9 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
+/**
+ * The backend wraps every response in { success, data, message }.
+ * This helper unwraps `.data` automatically.
+ */
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem("driver_token");
   const res = await fetch(`${API_URL}${path}`, {
@@ -14,7 +18,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(body.message || res.statusText);
   }
-  return res.json();
+  const json = await res.json();
+  // Backend ResponseInterceptor wraps in { success, data, message }
+  return json.data !== undefined ? json.data : json;
 }
 
 /* ── Auth ── */

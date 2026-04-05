@@ -9,6 +9,7 @@ import {
 import { useSocket } from "./SocketContext";
 import { useAuth } from "./AuthContext";
 import { getDriverDeliveries, updateDeliveryStatus as apiUpdateStatus } from "../services/api";
+import { useLocationTracking } from "../hooks/useLocationTracking";
 import type { Delivery, DeliveryStatus } from "../types";
 
 /* ─── Types ─── */
@@ -113,6 +114,12 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
     loading: true,
     activeDeliveryId: null,
     alerts: [],
+  });
+
+  /* ── Live location tracking ── */
+  useLocationTracking({
+    driverId: driverId ?? "",
+    activeDeliveryId: state.activeDeliveryId,
   });
 
   /* ── Fetch deliveries from API ── */

@@ -8,7 +8,10 @@ import {
 } from "react";
 import { useSocket } from "./SocketContext";
 import { useAuth } from "./AuthContext";
-import { getDriverDeliveries, updateDeliveryStatus as apiUpdateStatus } from "../services/api";
+import {
+  getDriverDeliveries,
+  updateDeliveryStatus as apiUpdateStatus,
+} from "../services/api";
 import { useLocationTracking } from "../hooks/useLocationTracking";
 import type { Delivery, DeliveryStatus } from "../types";
 
@@ -65,7 +68,9 @@ function reducer(state: DeliveryState, action: DeliveryAction): DeliveryState {
           d.id === action.deliveryId ? { ...d, status: action.status } : d,
         ),
         activeDeliveryId:
-          (action.status === "delivered" || action.status === "failed" || action.status === "handed_off") &&
+          (action.status === "delivered" ||
+            action.status === "failed" ||
+            action.status === "handed_off") &&
           state.activeDeliveryId === action.deliveryId
             ? null
             : state.activeDeliveryId,
@@ -75,7 +80,10 @@ function reducer(state: DeliveryState, action: DeliveryAction): DeliveryState {
       return {
         ...state,
         deliveries: [action.delivery, ...state.deliveries],
-        alerts: [...state.alerts, { delivery: action.delivery, receivedAt: Date.now() }],
+        alerts: [
+          ...state.alerts,
+          { delivery: action.delivery, receivedAt: Date.now() },
+        ],
       };
 
     case "DISMISS_ALERT":
@@ -98,7 +106,8 @@ const DeliveryContext = createContext<DeliveryContextValue | null>(null);
 
 export function useDeliveries() {
   const ctx = useContext(DeliveryContext);
-  if (!ctx) throw new Error("useDeliveries must be used inside DeliveryProvider");
+  if (!ctx)
+    throw new Error("useDeliveries must be used inside DeliveryProvider");
   return ctx;
 }
 
@@ -153,7 +162,12 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const onStatusUpdate = (data: { deliveryId?: string; shipmentId?: string; newStatus?: string; status?: DeliveryStatus }) => {
+    const onStatusUpdate = (data: {
+      deliveryId?: string;
+      shipmentId?: string;
+      newStatus?: string;
+      status?: DeliveryStatus;
+    }) => {
       const id = data.deliveryId || data.shipmentId;
       if (!id) return;
       // Map backend status strings to frontend status
@@ -216,7 +230,9 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
           d.status !== "pending",
       );
       if (hasActive) {
-        alert("You must complete your current delivery before accepting a new one.");
+        alert(
+          "You must complete your current delivery before accepting a new one.",
+        );
         return;
       }
       emitStatus(deliveryId, "accept", "assigned");

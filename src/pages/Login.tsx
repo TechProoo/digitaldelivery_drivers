@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mail, Lock, Eye, EyeOff, Truck, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Login() {
@@ -59,38 +59,17 @@ export default function Login() {
       >
         {/* Logo area */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div
+          <img
+            src="/logo.png"
+            alt="Digital Delivery"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: "linear-gradient(135deg, #1E40AF, #3b82f6)",
+              width: 72,
+              height: 72,
+              objectFit: "contain",
               marginBottom: 16,
-              position: "relative",
+              display: "inline-block",
             }}
-          >
-            <Truck size={28} color="#fff" />
-            <span
-              style={{
-                position: "absolute",
-                bottom: -6,
-                right: -6,
-                background: "linear-gradient(135deg, #1E40AF, #3b82f6)",
-                color: "#fff",
-                fontSize: 10,
-                fontWeight: 800,
-                borderRadius: 6,
-                padding: "2px 5px",
-                letterSpacing: 0.5,
-                border: "2px solid #0b1118",
-              }}
-            >
-              DD
-            </span>
-          </div>
+          />
           <div
             style={{
               fontSize: 20,

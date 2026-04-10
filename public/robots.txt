@@ -1,0 +1,18 @@
+# Digital Delivery — Driver Portal
+# This is a private, login-gated application. Keep it out of search indexes.
+
+User-agent: *
+Disallow: /
+
+# Still allow link-preview crawlers so shared links render nicely on social.
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /

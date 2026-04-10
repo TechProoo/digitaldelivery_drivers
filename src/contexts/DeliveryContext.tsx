@@ -4,6 +4,7 @@ import {
   useReducer,
   useEffect,
   useCallback,
+  useMemo,
   type ReactNode,
 } from "react";
 import { useSocket } from "./SocketContext";
@@ -25,8 +26,6 @@ interface IncomingAlert {
 interface DeliveryState {
   deliveries: Delivery[];
   loading: boolean;
-  /** Delivery currently being tracked (live location sent to admin) */
-  activeDeliveryId: string | null;
   /** Pending alerts for new assignments */
   alerts: IncomingAlert[];
 }
@@ -36,10 +35,18 @@ type DeliveryAction =
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "UPDATE_STATUS"; deliveryId: string; status: DeliveryStatus }
   | { type: "NEW_ASSIGNMENT"; delivery: Delivery }
-  | { type: "DISMISS_ALERT"; deliveryId: string }
-  | { type: "SET_ACTIVE_DELIVERY"; deliveryId: string | null };
+  | { type: "DISMISS_ALERT"; deliveryId: string };
+
+/** Statuses for which the driver is in the field and we want live GPS. */
+const ACTIVE_TRACKING_STATUSES: DeliveryStatus[] = [
+  "assigned",
+  "picked_up",
+  "in_transit",
+];
 
 interface DeliveryContextValue extends DeliveryState {
+  /** Delivery currently being tracked (derived from deliveries list) */
+  activeDeliveryId: string | null;
   acceptDelivery: (deliveryId: string) => void;
   rejectDelivery: (deliveryId: string) => void;
   pickUpDelivery: (deliveryId: string) => void;
@@ -67,13 +74,6 @@ function reducer(state: DeliveryState, action: DeliveryAction): DeliveryState {
         deliveries: state.deliveries.map((d) =>
           d.id === action.deliveryId ? { ...d, status: action.status } : d,
         ),
-        activeDeliveryId:
-          (action.status === "delivered" ||
-            action.status === "failed" ||
-            action.status === "handed_off") &&
-          state.activeDeliveryId === action.deliveryId
-            ? null
-            : state.activeDeliveryId,
       };
 
     case "NEW_ASSIGNMENT":
@@ -91,9 +91,6 @@ function reducer(state: DeliveryState, action: DeliveryAction): DeliveryState {
         ...state,
         alerts: state.alerts.filter((a) => a.delivery.id !== action.deliveryId),
       };
-
-    case "SET_ACTIVE_DELIVERY":
-      return { ...state, activeDeliveryId: action.deliveryId };
 
     default:
       return state;
@@ -121,14 +118,24 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, {
     deliveries: [],
     loading: true,
-    activeDeliveryId: null,
     alerts: [],
   });
+
+  /* ── Derive the active delivery from the deliveries list ──
+   * The driver is "in the field" (and we want live GPS) for any delivery in
+   * an in-progress status. Deriving this instead of tracking it manually means
+   * tracking starts the moment a delivery is accepted AND survives reloads. */
+  const activeDeliveryId = useMemo(() => {
+    const active = state.deliveries.find((d) =>
+      ACTIVE_TRACKING_STATUSES.includes(d.status),
+    );
+    return active?.id ?? null;
+  }, [state.deliveries]);
 
   /* ── Live location tracking ── */
   useLocationTracking({
     driverId: driverId ?? "",
-    activeDeliveryId: state.activeDeliveryId,
+    activeDeliveryId,
   });
 
   /* ── Fetch deliveries from API ── */
@@ -261,33 +268,23 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
   );
 
   const startDelivery = useCallback(
-    (deliveryId: string) => {
-      emitStatus(deliveryId, "start", "in_transit");
-      dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId });
-    },
+    (deliveryId: string) => emitStatus(deliveryId, "start", "in_transit"),
     [emitStatus],
   );
 
   const completeDelivery = useCallback(
-    (deliveryId: string) => {
-      emitStatus(deliveryId, "complete", "delivered");
-      dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId: null });
-    },
+    (deliveryId: string) => emitStatus(deliveryId, "complete", "delivered"),
     [emitStatus],
   );
 
   const failDelivery = useCallback(
-    (deliveryId: string) => {
-      emitStatus(deliveryId, "fail", "failed");
-      dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId: null });
-    },
+    (deliveryId: string) => emitStatus(deliveryId, "fail", "failed"),
     [emitStatus],
   );
 
   const handOffDelivery = useCallback(
     (deliveryId: string) => {
       emitStatus(deliveryId, "handoff", "handed_off");
-      dispatch({ type: "SET_ACTIVE_DELIVERY", deliveryId: null });
       socket?.emit("driver:tracking-stopped", { driverId });
     },
     [emitStatus, socket, driverId],
@@ -302,6 +299,7 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
     <DeliveryContext.Provider
       value={{
         ...state,
+        activeDeliveryId,
         acceptDelivery,
         rejectDelivery,
         pickUpDelivery,

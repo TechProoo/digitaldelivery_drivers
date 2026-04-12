@@ -204,25 +204,29 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
     };
   }, [socket, driverId]);
 
-  /* ── Actions — call REST API + emit socket ── */
+  /* ── Actions — call REST API, then notify admin via socket ── */
 
   const emitStatus = useCallback(
     (deliveryId: string, action: string, frontendStatus: DeliveryStatus) => {
       if (!driverId) return;
       // Optimistic update
       dispatch({ type: "UPDATE_STATUS", deliveryId, status: frontendStatus });
-      // Call REST API
-      apiUpdateStatus(deliveryId, driverId, action).catch((err) => {
-        console.error(`Failed to update status (${action}):`, err);
-        // Refresh to get real state on error
-        refreshDeliveries();
-      });
-      // Also emit via socket for real-time
-      socket?.emit("delivery:status-change", {
-        shipmentId: deliveryId,
-        driverId,
-        action,
-      });
+      // Call REST API — single source of truth for the DB update
+      apiUpdateStatus(deliveryId, driverId, action)
+        .then(() => {
+          // Notify admin in real time (broadcast only, no duplicate DB write)
+          socket?.emit("delivery:status-notify", {
+            shipmentId: deliveryId,
+            driverId,
+            action,
+            newStatus: frontendStatus,
+          });
+        })
+        .catch((err) => {
+          console.error(`Failed to update status (${action}):`, err);
+          // Refresh to get real state on error
+          refreshDeliveries();
+        });
     },
     [socket, driverId, refreshDeliveries],
   );

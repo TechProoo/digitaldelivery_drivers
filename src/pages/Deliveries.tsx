@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useDeliveries } from "../contexts/DeliveryContext";
 import { STATUS_CONFIG, type Delivery } from "../types";
 import {
@@ -507,7 +508,8 @@ function CurrentDeliveryCard({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span
+            <Link
+              to={`/messages?orderId=${delivery.trackingNumber}`}
               style={{
                 fontFamily: "monospace",
                 fontSize: 11,
@@ -515,10 +517,21 @@ function CurrentDeliveryCard({
                 background: "rgba(255,255,255,0.03)",
                 padding: "3px 8px",
                 borderRadius: 6,
+                textDecoration: "none",
+                cursor: "pointer",
+                transition: "all 150ms",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(59,130,246,0.2)";
+                e.currentTarget.style.color = "#3b82f6";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                e.currentTarget.style.color = "var(--text-tertiary)";
               }}
             >
               {delivery.trackingNumber}
-            </span>
+            </Link>
             <button
               onClick={() => onViewDetails(delivery)}
               style={{
@@ -845,8 +858,8 @@ function CurrentDeliveryCard({
                 )}{" "}
                 Hand Off to Carrier
               </button>
-              <button
-                onClick={() => onFailDelivery(delivery.id)}
+              <Link
+                to={`/messages?orderId=${delivery.trackingNumber}`}
                 style={{
                   height: 40,
                   borderRadius: 11,
@@ -860,10 +873,20 @@ function CurrentDeliveryCard({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 5,
+                  textDecoration: "none",
+                  transition: "all 150ms",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                  e.currentTarget.style.borderColor = "rgba(239,68,68,0.5)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)";
                 }}
               >
                 <AlertTriangle size={13} /> Issue
-              </button>
+              </Link>
             </>
           )}
           {delivery.status === "in_transit" && !isAirSea && (
@@ -890,8 +913,8 @@ function CurrentDeliveryCard({
               >
                 <CheckCircle2 size={15} /> Mark as Delivered
               </button>
-              <button
-                onClick={() => onFailDelivery(delivery.id)}
+              <Link
+                to={`/messages?orderId=${delivery.trackingNumber}`}
                 style={{
                   height: 40,
                   borderRadius: 11,
@@ -905,10 +928,20 @@ function CurrentDeliveryCard({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 5,
+                  textDecoration: "none",
+                  transition: "all 150ms",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                  e.currentTarget.style.borderColor = "rgba(239,68,68,0.5)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)";
                 }}
               >
                 <AlertTriangle size={13} /> Issue
-              </button>
+              </Link>
             </>
           )}
           {delivery.status === "handed_off" && (
@@ -1351,15 +1384,25 @@ function HistoryRow({
           <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
             {delivery.customerName}
           </span>
-          <span
+          <Link
+            to={`/messages?orderId=${delivery.trackingNumber}`}
             style={{
               fontFamily: "monospace",
               fontSize: 9,
               color: "var(--text-tertiary)",
+              textDecoration: "none",
+              cursor: "pointer",
+              transition: "color 150ms",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "#3b82f6";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "var(--text-tertiary)";
             }}
           >
             {delivery.trackingNumber}
-          </span>
+          </Link>
         </div>
         <p
           className="truncate"
@@ -1530,15 +1573,25 @@ function DeliveryDetailsModal({
             >
               Delivery Details
             </h2>
-            <span
+            <Link
+              to={`/messages?orderId=${delivery.trackingNumber}`}
               style={{
                 fontFamily: "monospace",
                 fontSize: 12,
                 color: "var(--text-tertiary)",
+                textDecoration: "none",
+                cursor: "pointer",
+                transition: "color 150ms",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#3b82f6";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-tertiary)";
               }}
             >
               {delivery.trackingNumber}
-            </span>
+            </Link>
           </div>
           <div className="flex items-center gap-2">
             <span

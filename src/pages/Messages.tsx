@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Shield,
   Send,
@@ -68,6 +69,8 @@ export default function Messages() {
   const { driver } = useAuth();
   const { socket } = useSocket();
   const driverId = driver?.id;
+  const [searchParams] = useSearchParams();
+  const orderId = searchParams.get("orderId"); // e.g., "DD-2026-467243"
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -224,10 +227,12 @@ export default function Messages() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="flex items-center gap-2">
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#fff", margin: 0 }}>Admin Operations</h2>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "#fff", margin: 0 }}>
+              {orderId ? `Order ${orderId}` : "Admin Operations"}
+            </h2>
           </div>
           <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0, marginTop: 1 }}>
-            Digital Delivery HQ &middot; <span style={{ color: "#22c55e" }}>Online</span>
+            {orderId ? "Delivery conversation" : "Digital Delivery HQ"} &middot; <span style={{ color: "#22c55e" }}>Online</span>
           </p>
         </div>
 
@@ -269,10 +274,21 @@ export default function Messages() {
           <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.05))", border: "1px solid rgba(59,130,246,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
             <Shield size={24} style={{ color: "#3b82f6" }} />
           </div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>Admin Operations</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
+            {orderId ? `Order ${orderId}` : "Admin Operations"}
+          </p>
           <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2, lineHeight: 1.5 }}>
-            Messages from Digital Delivery admin team.<br />
-            Delivery updates, alerts, and instructions appear here.
+            {orderId ? (
+              <>
+                Discuss this delivery order.<br />
+                Ask for updates or report issues.
+              </>
+            ) : (
+              <>
+                Messages from Digital Delivery admin team.<br />
+                Delivery updates, alerts, and instructions appear here.
+              </>
+            )}
           </p>
         </div>
 
